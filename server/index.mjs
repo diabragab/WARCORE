@@ -10,7 +10,7 @@ import { handleAccounts } from './accounts.mjs';
 const PORT = Number(process.env.PORT) || 8787;
 const DIST = fileURLToPath(new URL('../dist/', import.meta.url));
 const THEMES = ['warzone', 'grass', 'desert', 'snow'];
-const TYPES = { '.html': 'text/html', '.js': 'text/javascript', '.css': 'text/css', '.woff2': 'font/woff2', '.woff': 'font/woff', '.png': 'image/png', '.svg': 'image/svg+xml' };
+const TYPES = { '.html': 'text/html', '.js': 'text/javascript', '.css': 'text/css', '.woff2': 'font/woff2', '.woff': 'font/woff', '.png': 'image/png', '.svg': 'image/svg+xml', '.webp': 'image/webp', '.ico': 'image/x-icon', '.json': 'application/json' };
 
 const http = createServer(async (req, res) => {
   if (req.url === '/health') return res.end('ok');
@@ -23,7 +23,11 @@ const http = createServer(async (req, res) => {
       return;
     }
   }
-  const path = normalize(decodeURIComponent((req.url || '/').split('?')[0])).replace(/^([/\\])+/, '');
+  const url = (req.url || '/').split('?')[0];
+  // The website: "/" is the landing page and the game lives at "/play/".
+  if (url === '/play') return res.writeHead(301, { location: '/play/' }).end();
+  const page = url === '/' ? 'landing.html' : url.startsWith('/play/') ? url.slice(5) : url;
+  const path = normalize(decodeURIComponent(page)).replace(/^([/\\])+/, '');
   try {
     const file = join(DIST, path === '' ? 'index.html' : path);
     if (!file.startsWith(DIST)) throw new Error('outside');

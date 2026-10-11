@@ -63,7 +63,14 @@ function startDemo() {
 
 const screens = ['menu', 'setup', 'shop', 'online', 'settings', 'account', 'pause', 'result'] as const;
 type Screen = (typeof screens)[number] | 'none';
+/** Players need an account to play (except in the offline preview page, which can't reach the server). */
+const mustSignIn = () => account.accountsAvailable() && !account.session;
+
 function show(name: Screen) {
+  if (mustSignIn() && name !== 'account') {
+    name = 'account';
+    renderAccount();
+  }
   for (const s of screens) $(`#${s}`).hidden = s !== name;
   $('#touch').hidden = !(inMatch && name === 'none' && matchMedia('(pointer: coarse)').matches);
   $('#vignette').hidden = inMatch || name === 'none' || name === 'result';
@@ -157,6 +164,8 @@ function renderAccount(status = '') {
   $('#acc-form').hidden = !!s;
   $('#acc-signed').hidden = !s;
   $('#acc-title').textContent = s ? s.name : accMode === 'login' ? 'Sign in' : 'Create an account';
+  $('#acc-eyebrow').textContent = s ? 'Player account' : 'Sign in to play WARCORE';
+  $('#acc-back').hidden = mustSignIn();
   if (s) $('#acc-signed-text').textContent = 'Your coins, tanks, weapons and paint jobs are saved to this account. Sign in with the same name on any computer or browser to get them back.';
   $('#acc-tab-login').setAttribute('aria-selected', String(accMode === 'login'));
   $('#acc-tab-register').setAttribute('aria-selected', String(accMode === 'register'));
@@ -165,7 +174,7 @@ function renderAccount(status = '') {
   $('#acc-hint').textContent =
     accMode === 'login'
       ? 'Signing in loads the progress saved on your account.'
-      : `Your account starts with what you have now (${profile.coins} coins and everything you own). Names are 3 to 16 letters or numbers; passwords need at least 6 characters.`;
+      : 'Pick a player name (3 to 16 letters or numbers) and a password of at least 6 characters. Your coins and everything you buy are saved to it.';
   $('#acc-status').textContent = status;
   $('#acc-status').classList.toggle('error', false);
 }
@@ -192,7 +201,7 @@ $('#acc-fields').onsubmit = async (e) => {
     useProfile(accMode === 'login' ? await account.login(name, pass) : await account.register(name, pass, profile));
     $<HTMLInputElement>('#acc-pass').value = '';
     sfx.coin();
-    renderAccount(accMode === 'login' ? 'Signed in. Your saved progress is loaded.' : 'Account created. Your progress is now saved to it.');
+    show('menu');
   } catch (err) {
     $('#acc-status').textContent = (err as Error).message;
     $('#acc-status').classList.add('error');
@@ -202,16 +211,25 @@ $('#acc-fields').onsubmit = async (e) => {
 };
 $('#acc-logout').onclick = async () => {
   await account.logout();
-  renderAccount('Signed out. Progress on this computer stays as it is, and your account keeps its own copy.');
+  // The next person to sign in on this computer shouldn't inherit this player's items.
+  useProfile(normalize({}));
+  renderAccount();
+  show('account');
 };
 
 // Refresh from the account on start, so purchases made on another computer show up here.
-account.fetchProfile().then((p) => {
-  if (p) {
-    useProfile(p);
-    if (!$('#menu').hidden) renderMenu();
-  }
-}, () => {});
+account.fetchProfile().then(
+  (p) => {
+    if (p) {
+      useProfile(p);
+      if (!$('#menu').hidden) renderMenu();
+    }
+  },
+  () => {
+    // An expired sign-in sends the player back to the sign-in screen.
+    if (mustSignIn() && !inMatch) show('account');
+  },
+);
 
 // ------------------------------------------------------------------ setup
 

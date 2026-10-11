@@ -1,0 +1,120 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>WARCORE: Armored Warfare</title>
+<meta name="description" content="WARCORE is a free turn-based tank artillery game. Battle the computer, survive arcade waves, or get matched online. Play in your browser or on Windows.">
+<meta property="og:title" content="WARCORE: Armored Warfare">
+<meta property="og:description" content="Turn-based tank artillery. Read the wind, set your angle, and blow the ground out from under your rival.">
+<meta property="og:image" content="/media/hero.webp">
+<link rel="icon" type="image/png" href="/src-tauri/icons/32x32.png">
+<script type="module" src="/src/landing.ts"></script>
+</head>
+<body>
+<header class="nav">
+  <a class="nav-logo" href="#top"><img src="/src/assets/logo.webp" alt="WARCORE" width="1100" height="550"></a>
+  <nav class="nav-links" aria-label="Sections">
+    <a href="#game">Game</a>
+    <a href="#modes">Modes</a>
+    <a href="#gallery">Media</a>
+    <a href="#download">Download</a>
+  </nav>
+  <a class="btn primary" href="/play/">Play now</a>
+</header>
+
+<main id="top">
+  <section class="hero">
+    <div class="hero-bg" aria-hidden="true"></div>
+    <div class="hero-copy">
+      <h1>Battle<br>Upgrade<br><span>Dominate</span></h1>
+      <p class="lead">Turn-based tank artillery in a living warzone. Read the wind, set your angle, and blow the ground out from under your rival.</p>
+      <div class="cta">
+        <a class="btn primary big" href="/play/">Play in your browser <span aria-hidden="true">›</span></a>
+        <a class="btn ghost big" href="#download">Download for Windows</a>
+      </div>
+      <p class="fine">Free to play. Create a free account to save your tanks and coins.</p>
+    </div>
+  </section>
+
+  <section class="features" id="game" aria-label="Features">
+    <div class="feature">
+      <svg viewBox="0 0 24 24" aria-hidden="true"><circle cx="12" cy="12" r="9"/><path d="M3 12h18M12 3c3 3 3 15 0 18M12 3c-3 3-3 15 0 18"/></svg>
+      <h3>Epic battles</h3>
+      <p>Destructible ground, wind that shifts every turn, and seven weapons from shells to the nuke.</p>
+    </div>
+    <div class="feature">
+      <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M14.7 6.3a4 4 0 0 0 5 5L21 13l-8 8-2-2 1.3-1.3a4 4 0 0 0-5-5L3 16"/><path d="M4 4l6 6"/></svg>
+      <h3>Tank customization</h3>
+      <p>Unlock four tank classes, paint jobs, decals and shell trails in the garage.</p>
+    </div>
+    <div class="feature">
+      <svg viewBox="0 0 24 24" aria-hidden="true"><circle cx="8" cy="8" r="3"/><circle cx="16" cy="8" r="3"/><path d="M2 20c0-3 3-5 6-5s6 2 6 5M10 20c0-3 3-5 6-5s6 2 6 5"/></svg>
+      <h3>Global warfare</h3>
+      <p>Press Online and you're matched with the next commander who's searching.</p>
+    </div>
+    <div class="feature">
+      <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M7 4h10v5a5 5 0 0 1-10 0V4Z"/><path d="M7 6H4a3 3 0 0 0 3 4M17 6h3a3 3 0 0 1-3 4M12 14v4M8 21h8"/></svg>
+      <h3>Competitive modes</h3>
+      <p>Arcade waves, three computer difficulties, and local two-player on one keyboard.</p>
+    </div>
+  </section>
+
+  <section class="modes" id="modes">
+    <div class="section-head">
+      <p class="eyebrow">Game modes</p>
+      <h2>Four ways to fight</h2>
+    </div>
+    <div class="mode-grid">
+      <article class="mode">
+        <img src="/media/shot-online.webp" alt="Two tanks trading fire across a hillside" width="1600" height="900">
+        <div><h3>Online match</h3><p>Automatic matchmaking against real players. Wins pay the most coins.</p></div>
+      </article>
+      <article class="mode">
+        <img src="/media/shot-arcade.webp" alt="Your tank facing three enemy tanks on a snowy ridge" width="1600" height="900">
+        <div><h3>Arcade</h3><p>Survive wave after wave of enemy tanks. Damage carries over, so every shot counts.</p></div>
+      </article>
+      <article class="mode">
+        <img src="/media/shot-ai.webp" alt="A shell arcing over a ruined city" width="1600" height="900">
+        <div><h3>Versus computer</h3><p>Recruit, Sergeant or General. The General rarely misses.</p></div>
+      </article>
+      <article class="mode">
+        <img src="/media/shot-shop.webp" alt="The garage with tanks for sale" width="1600" height="900">
+        <div><h3>Garage &amp; shop</h3><p>Spend your winnings on heavier armor, bigger guns and a paint job to remember.</p></div>
+      </article>
+    </div>
+  </section>
+
+  <section class="gallery" id="gallery">
+    <div class="section-head">
+      <p class="eyebrow">Media</p>
+      <h2>Warzones</h2>
+    </div>
+    <div class="gallery-grid">
+      <img src="/media/wall1.webp" alt="Tanks advancing through a burning city" width="900" height="441">
+      <img src="/media/wall2.webp" alt="Tanks in a snowy mountain fortress" width="900" height="403">
+      <img src="/media/wall3.webp" alt="A tank under helicopter fire at dusk" width="900" height="425">
+      <img src="/media/wall4.webp" alt="A tank by a mountain lake and dam" width="900" height="403">
+    </div>
+  </section>
+
+  <section class="download" id="download">
+    <img class="keyart" src="/media/keyart.webp" alt="" width="1000" height="680">
+    <div>
+      <p class="eyebrow">Get the game</p>
+      <h2>Play anywhere</h2>
+      <p class="lead">Jump in right from your browser, or install the Windows app for full-screen play. Your account and everything you've unlocked follow you to both.</p>
+      <div class="cta">
+        <a class="btn primary big" href="/play/">Play in your browser</a>
+        <a class="btn ghost big" href="https://github.com/diabragab/tanks/releases/latest">Download for Windows</a>
+      </div>
+    </div>
+  </section>
+</main>
+
+<footer class="foot">
+  <img src="/src/assets/logo.webp" alt="WARCORE" width="1100" height="550">
+  <p>© <span id="year"></span> WARCORE. All rights reserved.</p>
+</footer>
+</body>
+</html>
