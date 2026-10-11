@@ -33,15 +33,13 @@ h1, h2, h3 { margin: 0; text-transform: uppercase; letter-spacing: 0.04em; line-
 .nav-links a:hover { color: var(--text); }
 @media (max-width: 760px) { .nav-links { display: none; } .nav .btn { margin-left: auto; } .nav-logo img { height: 40px; } }
 
-.hero { position: relative; min-height: min(86vh, 820px); display: flex; align-items: center; padding: 80px clamp(16px, 6vw, 96px); overflow: hidden; }
-.hero-bg { position: absolute; inset: 0; background: url('/media/hero.webp') center right / cover no-repeat; transform: scale(1.03); }
-.hero-bg::after { content: ''; position: absolute; inset: 0; background: linear-gradient(90deg, rgba(11, 12, 15, 0.96) 0%, rgba(11, 12, 15, 0.75) 38%, rgba(11, 12, 15, 0.1) 75%), linear-gradient(0deg, var(--ink) 0%, transparent 30%); }
-.hero-copy { position: relative; max-width: 560px; }
-.hero h1 { font-size: clamp(44px, 7vw, 88px); font-weight: 700; text-shadow: 0 4px 30px rgba(0, 0, 0, 0.6); }
-.hero h1 span { color: var(--signal-hi); }
+.sr-only { position: absolute; width: 1px; height: 1px; overflow: hidden; clip: rect(0 0 0 0); white-space: nowrap; }
+.hero { position: relative; }
+.banner { width: 100%; height: auto; max-height: calc(100vh - 160px); object-fit: cover; object-position: center 40%; }
+.hero-bar { display: flex; align-items: center; justify-content: space-between; gap: 24px; flex-wrap: wrap; padding: 24px clamp(16px, 6vw, 96px) 36px; background: linear-gradient(180deg, rgba(11, 12, 15, 0) 0%, var(--ink) 40%); margin-top: -40px; position: relative; }
+.hero-bar .lead { margin: 0; max-width: 560px; }
 .lead { font-size: clamp(16px, 1.6vw, 19px); color: #d6d2cb; margin: 20px 0 28px; }
 .cta { display: flex; flex-wrap: wrap; gap: 12px; }
-.fine { color: var(--muted); font-size: 14px; margin-top: 16px; }
 
 .features { display: grid; grid-template-columns: repeat(4, 1fr); gap: 1px; background: var(--line); border-block: 1px solid var(--line); }
 .feature { background: var(--panel); padding: 32px 24px; text-align: center; }
@@ -72,3 +70,7 @@ section.modes, section.gallery { padding: 88px clamp(16px, 6vw, 96px) 0; }
 
 .foot { display: flex; align-items: center; justify-content: space-between; gap: 16px; flex-wrap: wrap; padding: 28px clamp(16px, 6vw, 96px); border-top: 1px solid var(--line); color: var(--muted); font-size: 14px; }
 .foot img { height: 44px; width: auto; }
+@media (max-width: 700px) {
+  .banner { aspect-ratio: 4 / 3; object-position: center 45%; }
+  .hero-bar { margin-top: 0; padding-top: 20px; }
+}

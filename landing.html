@@ -7,7 +7,7 @@
 <meta name="description" content="WARCORE is a free turn-based tank artillery game. Battle the computer, survive arcade waves, or get matched online. Play in your browser or on Windows.">
 <meta property="og:title" content="WARCORE: Armored Warfare">
 <meta property="og:description" content="Turn-based tank artillery. Read the wind, set your angle, and blow the ground out from under your rival.">
-<meta property="og:image" content="/media/hero.webp">
+<meta property="og:image" content="/media/banner-1200.webp">
 <link rel="icon" type="image/png" href="/src-tauri/icons/32x32.png">
 <script type="module" src="/src/landing.ts"></script>
 </head>
@@ -25,15 +25,17 @@
 
 <main id="top">
   <section class="hero">
-    <div class="hero-bg" aria-hidden="true"></div>
-    <div class="hero-copy">
-      <h1>Battle<br>Upgrade<br><span>Dominate</span></h1>
+    <h1 class="sr-only">WARCORE: Armored Warfare. Battle, upgrade, dominate.</h1>
+    <picture>
+      <source media="(max-width: 900px)" srcset="/media/banner-1200.webp">
+      <img class="banner" src="/media/banner.webp" alt="WARCORE: Armored Warfare. Tanks battle across a burning city and a snowy mountain fortress. Battle. Upgrade. Dominate." width="1983" height="793">
+    </picture>
+    <div class="hero-bar">
       <p class="lead">Turn-based tank artillery in a living warzone. Read the wind, set your angle, and blow the ground out from under your rival.</p>
       <div class="cta">
         <a class="btn primary big" href="/play/">Play in your browser <span aria-hidden="true">›</span></a>
         <a class="btn ghost big" href="#download">Download for Windows</a>
       </div>
-      <p class="fine">Free to play. Create a free account to save your tanks and coins.</p>
     </div>
   </section>
 
