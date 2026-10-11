@@ -1,5 +1,6 @@
 # Runs the game + match server behind Caddy, which gets a free HTTPS certificate for your domain.
-# Usage on the server:  DOMAIN=tanks.example.com docker compose up -d --build
+# Usage on the server:  DOMAIN=warcore.example.com docker compose up -d --build
+# Leave DOMAIN empty to serve plain HTTP on the server IP until a domain is ready.
 services:
   tanks:
     build: ..
@@ -13,7 +14,8 @@ services:
       - "80:80"
       - "443:443"
     environment:
-      DOMAIN: ${DOMAIN:?Set DOMAIN to your game's domain, e.g. DOMAIN=tanks.example.com}
+      # The site Caddy serves: your domain (HTTPS) or :80 (plain HTTP on the IP)
+      SITE: ${DOMAIN:-:80}
     volumes:
       - ./Caddyfile:/etc/caddy/Caddyfile:ro
       - caddy_data:/data

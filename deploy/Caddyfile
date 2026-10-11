@@ -1,4 +1,6 @@
-{$DOMAIN} {
+# With DOMAIN set, Caddy serves https://DOMAIN with a free certificate.
+# Without it, the game is served over plain HTTP on port 80 at the server's IP.
+{$SITE} {
 	encode gzip
 	reverse_proxy tanks:8787
 }
