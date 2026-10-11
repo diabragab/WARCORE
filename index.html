@@ -18,9 +18,13 @@
       <p class="tagline">Turn-based tank artillery. Read the wind, set your angle, and blow the ground out from under your rival.</p>
     </div>
     <div class="launcher">
-      <p class="welcome">Welcome to <strong>WARCORE</strong></p>
+      <div class="account-bar">
+        <p class="welcome" id="menu-welcome">Welcome to <strong>WARCORE</strong></p>
+        <button class="btn ghost small" id="btn-account">Sign in</button>
+      </div>
       <nav class="menu-actions">
         <button id="btn-ai" class="btn primary big">Play vs Computer</button>
+        <button id="btn-arcade" class="btn">Arcade</button>
         <button id="btn-local" class="btn">Two Players</button>
         <button id="btn-online" class="btn">Online Match</button>
         <button id="btn-shop" class="btn">Garage &amp; Shop</button>
@@ -33,6 +37,37 @@
         <span class="coins" id="menu-coins"></span>
         <span id="menu-stats" class="muted"></span>
       </div>
+    </div>
+  </section>
+
+  <section id="account" class="screen" hidden>
+    <div class="panel setup-panel">
+      <p class="eyebrow">Player account</p>
+      <h2 id="acc-title">Sign in</h2>
+      <div id="acc-form">
+        <div class="tabs" role="tablist">
+          <button class="tab" role="tab" id="acc-tab-login" aria-selected="true">Sign in</button>
+          <button class="tab" role="tab" id="acc-tab-register" aria-selected="false">Create account</button>
+        </div>
+        <form id="acc-fields" class="col" autocomplete="on">
+          <div class="field">
+            <label class="label" for="acc-name">Player name</label>
+            <input id="acc-name" class="input" maxlength="16" autocomplete="username" required>
+          </div>
+          <div class="field">
+            <label class="label" for="acc-pass">Password</label>
+            <input id="acc-pass" class="input" type="password" maxlength="128" autocomplete="current-password" required>
+          </div>
+          <p class="hint" id="acc-hint"></p>
+          <button class="btn primary" id="acc-submit" type="submit">Sign in</button>
+        </form>
+      </div>
+      <div id="acc-signed" class="col" hidden>
+        <p class="hint" id="acc-signed-text"></p>
+        <button class="btn" id="acc-logout">Sign out</button>
+      </div>
+      <p class="hint status" id="acc-status" role="status"></p>
+      <div class="row"><button class="btn ghost" data-back>Back</button></div>
     </div>
   </section>
 

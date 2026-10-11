@@ -19,11 +19,11 @@ interface Hooks {
   lost: () => void;
 }
 
-const NAME_KEY = 'tanks.name';
+export const NAME_KEY = 'tanks.name';
 const SERVER_KEY = 'tanks.server';
 const $ = <T extends HTMLElement = HTMLElement>(sel: string) => document.querySelector(sel) as T;
 
-function store(key: string, value?: string): string | null {
+export function store(key: string, value?: string): string | null {
   try {
     if (value === undefined) return localStorage.getItem(key);
     localStorage.setItem(key, value);
@@ -44,10 +44,15 @@ function defaultServer(): string {
 }
 
 /** True inside a sandboxed preview page (for example a shared link) that blocks WebSockets. */
-function inPreview(): boolean {
+export function inPreview(): boolean {
   const { hostname, protocol } = location;
   const local = hostname === 'localhost' || hostname === '127.0.0.1' || hostname === 'tauri.localhost' || protocol === 'tauri:' || protocol === 'file:';
   return !local && /claude/.test(hostname);
+}
+
+/** The game server's web address (for accounts), derived from the match server address. */
+export function serverHttp(): string {
+  return (store(SERVER_KEY) ?? defaultServer()).replace(/^ws/, 'http').replace(/\/+$/, '');
 }
 
 /** Lobby UI plus the WebSocket connection to the match server. */

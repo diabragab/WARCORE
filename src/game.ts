@@ -14,11 +14,13 @@ export interface PlayerSetup {
   model: string;
   look: Look;
   weapons: string[];
+  /** Starting health, if not the tank's full health (arcade carries damage between waves). */
+  hp?: number;
 }
 
 export interface MatchResult {
   winnerTeam: number | null;
-  players: { name: string; team: number; damage: number; ai?: Difficulty; alive: boolean }[];
+  players: { name: string; team: number; damage: number; ai?: Difficulty; alive: boolean; hp: number }[];
 }
 
 export interface GameOptions {
@@ -31,6 +33,8 @@ export interface GameOptions {
   /** Online play: which team is on this device, and how to reach the other one. */
   net?: { me: number; send: (m: NetMsg) => void };
   onEnd?: (r: MatchResult) => void;
+  /** Arcade: this player gets every other turn, with the enemies taking turns in between. */
+  hero?: number;
 }
 
 interface TankState { x: number; y: number; hp: number; alive: boolean; drowned: boolean; damage: number; ammo: number[] }
@@ -157,6 +161,7 @@ export class Game {
   private ended = false;
   private lastTick = 0;
   private turnNo = 0;
+  private foeTurn = -1;
   private netT = 0;
   private syncs: Extract<NetMsg, { k: 'sync' }>[] = [];
 
@@ -198,7 +203,7 @@ export class Game {
         name: p.name, team: p.team, color: p.color, ai: p.ai, model, look: p.look,
         remote: !!this.opts.net && p.team !== this.opts.net.me,
         x, y, vx: 0, vy: 0, grounded: false, tilt: 0,
-        hp: model.hp, maxHp: model.hp, hpShown: model.hp, alive: true, drowned: false,
+        hp: Math.min(model.hp, p.hp ?? model.hp), maxHp: model.hp, hpShown: Math.min(model.hp, p.hp ?? model.hp), alive: true, drowned: false,
         elev: 45, facing: x < W / 2 ? 1 : -1, power: 0, lastPower: -1, charging: false,
         fuel: model.fuel, moveAcc: 0, arsenal, wi: 0, damage: 0, recoil: 0, trackPhase: 0,
       });
@@ -336,11 +341,18 @@ export class Game {
 
   private nextTurn() {
     const n = this.tanks.length;
-    for (let i = 1; i <= n; i++) {
-      const j = (this.turn + i) % n;
-      if (this.tanks[j].alive) {
-        this.turn = j;
-        break;
+    const h = this.opts.hero;
+    if (h !== undefined && this.tanks[h].alive && (this.turnNo === 0 || this.turn !== h)) {
+      this.turn = h;
+    } else {
+      const from = h !== undefined ? (this.foeTurn < 0 ? h : this.foeTurn) : this.turn;
+      for (let i = 1; i <= n; i++) {
+        const j = (from + i) % n;
+        if (this.tanks[j].alive && j !== h) {
+          this.turn = j;
+          if (h !== undefined) this.foeTurn = j;
+          break;
+        }
       }
     }
     const t = this.current;
@@ -655,7 +667,7 @@ export class Game {
     const alive = this.tanks.filter((t) => t.alive);
     return {
       winnerTeam: alive.length ? alive[0].team : null,
-      players: this.tanks.map((t) => ({ name: t.name, team: t.team, damage: t.damage, ai: t.ai, alive: t.alive })),
+      players: this.tanks.map((t) => ({ name: t.name, team: t.team, damage: t.damage, ai: t.ai, alive: t.alive, hp: t.alive ? Math.max(1, Math.round(t.hp)) : 0 })),
     };
   }
 

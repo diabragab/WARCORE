@@ -2,3 +2,4 @@ node_modules
 dist
 dist-single
 src-tauri/target
+data

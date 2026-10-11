@@ -216,3 +216,8 @@ h2 { margin: 0; font-family: var(--display); font-weight: 700; font-size: 32px; 
   .btn { transition: none; }
   .btn:hover:not(:disabled) { transform: none; }
 }
+
+.account-bar { display: flex; flex-direction: column; align-items: center; gap: 10px; }
+.account-bar .welcome { margin: 0; }
+.btn.small { padding: 6px 12px; font-size: 13px; min-height: 0; }
+#acc-fields { margin-top: 16px; }

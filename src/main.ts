@@ -9,7 +9,8 @@ import { Online } from './online';
 import { DECALS, MODELS, PAINTS, TRAILS, WEAPONS, modelById, paintById, type Cosmetic, type Look } from './data';
 import { drawTank, trailColor } from './draw';
 import { THEMES } from './terrain';
-import { loadProfile, owns, saveProfile } from './profile';
+import { loadProfile, normalize, owns, saveProfile, type Profile } from './profile';
+import * as account from './account';
 import { sfx } from './sfx';
 
 const $ = <T extends HTMLElement = HTMLElement>(sel: string) => document.querySelector(sel) as T;
@@ -60,7 +61,7 @@ function startDemo() {
 
 // ------------------------------------------------------------------ screens
 
-const screens = ['menu', 'setup', 'shop', 'online', 'settings', 'pause', 'result'] as const;
+const screens = ['menu', 'setup', 'shop', 'online', 'settings', 'account', 'pause', 'result'] as const;
 type Screen = (typeof screens)[number] | 'none';
 function show(name: Screen) {
   for (const s of screens) $(`#${s}`).hidden = s !== name;
@@ -70,8 +71,18 @@ function show(name: Screen) {
 }
 
 function renderMenu() {
+  const s = account.session;
+  $('#menu-welcome').innerHTML = s ? 'Welcome back' : 'Welcome to <strong>WARCORE</strong>';
+  if (s) {
+    const strong = document.createElement('strong');
+    strong.textContent = s.name;
+    $('#menu-welcome').append(strong);
+  }
+  $('#btn-account').textContent = s ? 'Account' : 'Sign in to save your progress';
+  $('#btn-account').hidden = !account.accountsAvailable();
   $('#menu-coins').textContent = `${profile.coins} coins`;
   $('#menu-stats').textContent = profile.stats.played ? `${profile.stats.wins} ${profile.stats.wins === 1 ? 'win' : 'wins'} from ${profile.stats.played} ${profile.stats.played === 1 ? 'match' : 'matches'}` : 'No matches played yet';
+  if (profile.stats.arcadeBest) $('#menu-stats').textContent += ` · Arcade best: wave ${profile.stats.arcadeBest}`;
 }
 
 // ------------------------------------------------------------------ settings
@@ -137,9 +148,74 @@ document.addEventListener('pointerdown', () => sfx.unlock(), { capture: true });
 document.addEventListener('keydown', () => sfx.unlock(), { capture: true });
 document.querySelectorAll<HTMLElement>('[data-back]').forEach((b) => (b.onclick = () => show('menu')));
 
+// ------------------------------------------------------------------ account
+
+let accMode: 'login' | 'register' = 'login';
+
+function renderAccount(status = '') {
+  const s = account.session;
+  $('#acc-form').hidden = !!s;
+  $('#acc-signed').hidden = !s;
+  $('#acc-title').textContent = s ? s.name : accMode === 'login' ? 'Sign in' : 'Create an account';
+  if (s) $('#acc-signed-text').textContent = 'Your coins, tanks, weapons and paint jobs are saved to this account. Sign in with the same name on any computer or browser to get them back.';
+  $('#acc-tab-login').setAttribute('aria-selected', String(accMode === 'login'));
+  $('#acc-tab-register').setAttribute('aria-selected', String(accMode === 'register'));
+  $('#acc-submit').textContent = accMode === 'login' ? 'Sign in' : 'Create account';
+  $<HTMLInputElement>('#acc-pass').autocomplete = accMode === 'login' ? 'current-password' : 'new-password';
+  $('#acc-hint').textContent =
+    accMode === 'login'
+      ? 'Signing in loads the progress saved on your account.'
+      : `Your account starts with what you have now (${profile.coins} coins and everything you own). Names are 3 to 16 letters or numbers; passwords need at least 6 characters.`;
+  $('#acc-status').textContent = status;
+  $('#acc-status').classList.toggle('error', false);
+}
+
+function useProfile(p: Profile) {
+  profile = normalize(p);
+  saveProfile(profile, false);
+}
+
+$('#btn-account').onclick = () => {
+  renderAccount();
+  show('account');
+};
+$('#acc-tab-login').onclick = () => ((accMode = 'login'), renderAccount());
+$('#acc-tab-register').onclick = () => ((accMode = 'register'), renderAccount());
+$('#acc-fields').onsubmit = async (e) => {
+  e.preventDefault();
+  const name = $<HTMLInputElement>('#acc-name').value.trim();
+  const pass = $<HTMLInputElement>('#acc-pass').value;
+  const btn = $<HTMLButtonElement>('#acc-submit');
+  btn.disabled = true;
+  $('#acc-status').textContent = accMode === 'login' ? 'Signing in…' : 'Creating your account…';
+  try {
+    useProfile(accMode === 'login' ? await account.login(name, pass) : await account.register(name, pass, profile));
+    $<HTMLInputElement>('#acc-pass').value = '';
+    sfx.coin();
+    renderAccount(accMode === 'login' ? 'Signed in. Your saved progress is loaded.' : 'Account created. Your progress is now saved to it.');
+  } catch (err) {
+    $('#acc-status').textContent = (err as Error).message;
+    $('#acc-status').classList.add('error');
+  } finally {
+    btn.disabled = false;
+  }
+};
+$('#acc-logout').onclick = async () => {
+  await account.logout();
+  renderAccount('Signed out. Progress on this computer stays as it is, and your account keeps its own copy.');
+};
+
+// Refresh from the account on start, so purchases made on another computer show up here.
+account.fetchProfile().then((p) => {
+  if (p) {
+    useProfile(p);
+    if (!$('#menu').hidden) renderMenu();
+  }
+}, () => {});
+
 // ------------------------------------------------------------------ setup
 
-type Mode = 'ai' | 'local' | 'online';
+type Mode = 'ai' | 'local' | 'online' | 'arcade';
 const setup = { mode: 'ai' as Mode, map: 'random', diff: 'normal' as Difficulty, p2Tank: 'patton', p2Paint: 'sand' };
 
 function chips<T extends string>(el: HTMLElement, items: { id: T; label: string; sub?: string; swatch?: string }[], current: T, pick: (v: T) => void, rerender: () => void = renderSetup) {
@@ -243,6 +319,96 @@ function startMatch() {
   show('none');
 }
 
+// ------------------------------------------------------------------ arcade
+
+/** Arcade: survive waves of computer tanks. Damage carries over, with a partial repair between waves. */
+const arcade = { wave: 1, hp: 0, damage: 0, coins: 0, won: false };
+const CALLSIGNS = ['Viper', 'Hammer', 'Rook', 'Grizzly', 'Talon', 'Mako', 'Brick', 'Jackal', 'Saber', 'Onyx', 'Havoc', 'Cinder'];
+const RANKS: Record<Difficulty, string> = { easy: 'Pvt.', normal: 'Sgt.', hard: 'Maj.' };
+
+function arcadeEnemies(w: number): Difficulty[] {
+  const waves: Difficulty[][] = [
+    ['easy'], ['normal'], ['easy', 'easy'], ['normal', 'easy'], ['hard'],
+    ['normal', 'normal'], ['hard', 'normal'], ['normal', 'normal', 'easy'],
+  ];
+  return waves[w - 1] ?? (w % 2 ? ['hard', 'hard', 'normal'] : ['hard', 'normal', 'normal']);
+}
+
+function startArcade(fresh: boolean) {
+  const model = modelById(profile.equipped.tank);
+  if (fresh) Object.assign(arcade, { wave: 1, hp: model.hp, damage: 0, coins: 0, won: false });
+  setup.mode = 'arcade';
+  const weapons = WEAPONS.filter((w) => owns(profile, 'weapon', w.id)).map((w) => w.id);
+  const me: PlayerSetup = { name: 'You', team: 0, color: '#ff8a3d', model: model.id, look: myLook(), weapons, hp: arcade.hp };
+  const names = [...CALLSIGNS].sort(() => Math.random() - 0.5);
+  const paints = PAINTS.filter((p) => p.id !== profile.equipped.paint);
+  const foes: PlayerSetup[] = arcadeEnemies(arcade.wave).map((d, i) => ({
+    name: `${RANKS[d]} ${names[i]}`, team: 1, color: '#6fc3e8', ai: d, model: rand(MODELS).id,
+    look: { paint: rand(paints).value, decal: rand(DECALS).id, trail: 'smoke' }, weapons: AI_WEAPONS[d],
+  }));
+  inMatch = true;
+  game = new Game({ players: [me, ...foes], theme: rand(Object.keys(THEMES)), seed: seed(), hero: 0, onEnd: finishArcade });
+  show('none');
+}
+
+function finishArcade(r: MatchResult) {
+  const me = r.players[0];
+  const won = r.winnerTeam === 0;
+  const wave = arcade.wave;
+  const coins = Math.round(me.damage / 3) + (won ? 30 + wave * 20 : 0);
+  arcade.damage += me.damage;
+  arcade.coins += coins;
+  arcade.won = won;
+  profile.coins += coins;
+  const cleared = won ? wave : wave - 1;
+  const best = cleared > profile.stats.arcadeBest;
+  if (best) profile.stats.arcadeBest = cleared;
+  if (!won) profile.stats.played++;
+  saveProfile(profile);
+
+  const maxHp = modelById(profile.equipped.tank).hp;
+  if (won) {
+    arcade.hp = Math.min(maxHp, me.hp + Math.round(maxHp * 0.35));
+    arcade.wave++;
+  }
+  $('#result-eyebrow').textContent = won ? `Wave ${wave} cleared` : 'Arcade over';
+  $('#result-title').textContent = won ? `Wave ${arcade.wave} is next` : `You cleared ${cleared} ${cleared === 1 ? 'wave' : 'waves'}`;
+  $<HTMLButtonElement>('#btn-rematch').disabled = false;
+  $('#btn-rematch').textContent = won ? 'Next wave' : 'Play again';
+  const rows: [string, string][] = won
+    ? [['Armor after repairs', `${arcade.hp} / ${maxHp}`], ['Next wave', `${arcadeEnemies(arcade.wave).length} enemy ${arcadeEnemies(arcade.wave).length === 1 ? 'tank' : 'tanks'}`], ['Damage dealt this run', String(arcade.damage)]]
+    : [['Waves cleared', String(cleared)], ['Best run', `${profile.stats.arcadeBest} ${best ? '(new record)' : ''}`.trim()], ['Damage dealt', String(arcade.damage)]];
+  resultTable(['Arcade', ''], rows);
+  $('#result-coins').textContent = `+${coins} coins  ·  ${profile.coins} total`;
+  sfx.coin();
+  inMatch = false;
+  show('result');
+}
+
+function resultTable(head: [string, string], rows: [string, string][]) {
+  const table = $('#result-table');
+  table.replaceChildren();
+  const th = document.createElement('thead');
+  const hr = document.createElement('tr');
+  for (const h of head) {
+    const c = document.createElement('th');
+    c.textContent = h;
+    hr.append(c);
+  }
+  th.append(hr);
+  const tb = document.createElement('tbody');
+  for (const [a, b] of rows) {
+    const tr = document.createElement('tr');
+    for (const v of [a, b]) {
+      const td = document.createElement('td');
+      td.textContent = v;
+      tr.append(td);
+    }
+    tb.append(tr);
+  }
+  table.append(th, tb);
+}
+
 function finishMatch(r: MatchResult, myTeam = 0, note = '') {
   const versus = setup.mode !== 'local';
   const me = r.players.find((p) => p.team === myTeam)!;
@@ -266,19 +432,7 @@ function finishMatch(r: MatchResult, myTeam = 0, note = '') {
     r.winnerTeam === null ? 'Draw' : versus ? (won ? 'Victory' : 'Defeated') : `${r.winnerTeam === 0 ? me.name : other.name} wins`;
   $<HTMLButtonElement>('#btn-rematch').disabled = false;
   $('#btn-rematch').textContent = 'Rematch';
-  const table = $('#result-table');
-  table.innerHTML = '<thead><tr><th>Commander</th><th>Damage dealt</th></tr></thead>';
-  const tb = document.createElement('tbody');
-  for (const p of [me, other]) {
-    const tr = document.createElement('tr');
-    const a = document.createElement('td');
-    a.textContent = p.name + (p.team === r.winnerTeam ? '  ★' : '');
-    const b = document.createElement('td');
-    b.textContent = String(p.damage);
-    tr.append(a, b);
-    tb.append(tr);
-  }
-  table.append(tb);
+  resultTable(['Commander', 'Damage dealt'], [me, other].map((p) => [p.name + (p.team === r.winnerTeam ? '  ★' : ''), String(p.damage)]));
   $('#result-coins').textContent = `+${coins} coins  ·  ${profile.coins} total`;
   sfx.coin();
   inMatch = false;
@@ -556,7 +710,9 @@ $('#btn-shop').onclick = openShop;
 $('#btn-start').onclick = startMatch;
 $('#btn-resume').onclick = () => pause(false);
 $('#btn-quit').onclick = quitToMenu;
+$('#btn-arcade').onclick = () => startArcade(true);
 $('#btn-rematch').onclick = () => {
+  if (setup.mode === 'arcade') return startArcade(!arcade.won);
   if (setup.mode !== 'online') return startMatch();
   online.rematch();
   $<HTMLButtonElement>('#btn-rematch').disabled = true;
@@ -619,4 +775,4 @@ requestAnimationFrame(frame);
 document.fonts?.ready.then(() => renderMenu());
 
 // Exposed for automated play-testing.
-(window as unknown as { __tanks: unknown }).__tanks = { get game() { return game; }, startMatch, setup };
+(window as unknown as { __tanks: unknown }).__tanks = { get game() { return game; }, startMatch, startArcade, arcade, setup };
