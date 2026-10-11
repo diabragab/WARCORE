@@ -137,4 +137,4 @@ setInterval(() => {
   }
 }, 30_000);
 
-http.listen(PORT, () => console.log(`WARCORE server on http://localhost:${PORT}`));
+http.listen(PORT, process.env.HOST || undefined, () => console.log(`WARCORE server on http://localhost:${PORT}`));
