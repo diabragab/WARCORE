@@ -61,7 +61,7 @@ async function loadDownload() {
     const r = await fetch('/api/download');
     const d = (await r.json()) as { windows: { file: string; size: number } | null };
     if (d.windows) {
-      note.textContent = `Windows 10 and 11 · ${(d.windows.size / 1048576).toFixed(1)} MB installer`;
+      note.textContent = `Windows 10 and 11 · ${(d.windows.size / 1048576).toFixed(1)} MB installer. If Windows says "Windows protected your PC", click More info, then Run anyway.`;
       return;
     }
   } catch {
