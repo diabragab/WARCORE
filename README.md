@@ -1,6 +1,6 @@
 # WARCORE
 
-Worms-style turn-based artillery. Runs in the browser and as a desktop app (Tauri, no Electron).
+Worms-style turn-based artillery. Runs in the browser and as a Windows app (Tauri, no Electron).
 
 ## What's in it
 
@@ -60,8 +60,9 @@ npm run tauri dev    # desktop window with hot reload
 npm run tauri build  # installers in src-tauri/target/release/bundle/
 ```
 
-`.github/workflows/desktop.yml` builds Windows, macOS and Linux installers on GitHub once this lives in a repo
-(push a `v*` tag or run it by hand).
+`.github/workflows/desktop.yml` builds the Windows installer (.msi and setup .exe) on GitHub on every push to `main`;
+download it from the run's artifacts. Set the repo variable `WARCORE_SERVER_URL` (e.g. `wss://warcore.example.com`)
+so the Windows app connects to your server for online play.
 
 ## Layout
 
