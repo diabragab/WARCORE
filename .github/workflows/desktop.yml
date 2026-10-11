@@ -1,12 +1,13 @@
 name: Windows build
 
 # Builds the WARCORE Windows installer (.msi and setup .exe) on every push to main.
+# Pushing a version tag (v1.2.3) also publishes a GitHub Release with the installers attached.
+# The repo uses immutable releases, so the release is created by this workflow (draft, upload, publish)
+# rather than by hand: a published release can't take new files, and a deleted tag name can't be reused.
 on:
   push:
     branches: [main]
     tags: ['v*']
-  release:
-    types: [published]
   workflow_dispatch:
 
 permissions:
@@ -36,11 +37,13 @@ jobs:
           path: |
             src-tauri/target/release/bundle/msi/*.msi
             src-tauri/target/release/bundle/nsis/*.exe
-      - name: Attach installers to the GitHub Release
-        if: github.event_name == 'release' || startsWith(github.ref, 'refs/tags/v')
+      - name: Publish the GitHub Release with the installers
+        if: startsWith(github.ref, 'refs/tags/v')
         uses: softprops/action-gh-release@v2
         with:
-          tag_name: ${{ github.event.release.tag_name || github.ref_name }}
+          tag_name: ${{ github.ref_name }}
+          name: WARCORE ${{ github.ref_name }}
+          body_path: .github/release-notes.md
           files: |
             src-tauri/target/release/bundle/msi/*.msi
             src-tauri/target/release/bundle/nsis/*.exe
