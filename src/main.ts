@@ -31,12 +31,33 @@ function resize() {
 window.addEventListener('resize', resize);
 resize();
 
+/** Vivid colours: a punchier grade on the canvas plus a soft bloom around fire, explosions and bright skies. */
+const graphics = { vivid: true };
+const bloom = document.createElement('canvas');
+const bctx = bloom.getContext('2d')!;
+
+function applyBloom() {
+  const w = Math.max(1, Math.round(canvas.width / 4)), h = Math.max(1, Math.round(canvas.height / 4));
+  if (bloom.width !== w || bloom.height !== h) Object.assign(bloom, { width: w, height: h });
+  // Keep only the bright parts (high contrast pushes the rest to black), blur them, then add them back as glow.
+  bctx.filter = 'brightness(0.55) contrast(2.6) saturate(1.4) blur(3px)';
+  bctx.globalCompositeOperation = 'copy';
+  bctx.drawImage(canvas, 0, 0, w, h);
+  ctx.save();
+  ctx.setTransform(1, 0, 0, 1, 0, 0);
+  ctx.globalCompositeOperation = 'lighter';
+  ctx.globalAlpha = 0.45;
+  ctx.drawImage(bloom, 0, 0, canvas.width, canvas.height);
+  ctx.restore();
+}
+
 let last = performance.now();
 function frame(now: number) {
   const dt = Math.min(0.05, (now - last) / 1000);
   last = now;
   game.update(dt);
   game.render(ctx, canvas.width, canvas.height);
+  if (graphics.vivid) applyBloom();
   requestAnimationFrame(frame);
 }
 
@@ -289,9 +310,20 @@ $('#purchases-back').onclick = () => {
 const isDesktopApp = '__TAURI_INTERNALS__' in window;
 const SETTINGS_KEY = 'tanks.settings';
 try {
-  sfx.muted = JSON.parse(localStorage.getItem(SETTINGS_KEY) || '{}').muted === true;
+  const saved = JSON.parse(localStorage.getItem(SETTINGS_KEY) || '{}');
+  sfx.muted = saved.muted === true;
+  graphics.vivid = saved.vivid !== false;
 } catch {
   /* defaults */
+}
+canvas.classList.toggle('vivid', graphics.vivid);
+
+function saveSettings() {
+  try {
+    localStorage.setItem(SETTINGS_KEY, JSON.stringify({ muted: sfx.muted, vivid: graphics.vivid }));
+  } catch {
+    /* ignore */
+  }
 }
 
 async function setFullscreen(on: boolean) {
@@ -322,11 +354,12 @@ async function isFullscreen(): Promise<boolean> {
 async function renderSettings() {
   chips($('#pick-sound'), [{ id: 'on', label: 'On' }, { id: 'off', label: 'Off' }], sfx.muted ? 'off' : 'on', (v) => {
     sfx.muted = v === 'off';
-    try {
-      localStorage.setItem(SETTINGS_KEY, JSON.stringify({ muted: sfx.muted }));
-    } catch {
-      /* ignore */
-    }
+    saveSettings();
+  }, renderSettings);
+  chips($('#pick-colors'), [{ id: 'vivid', label: 'Vivid HDR' }, { id: 'natural', label: 'Natural' }], graphics.vivid ? 'vivid' : 'natural', (v) => {
+    graphics.vivid = v === 'vivid';
+    canvas.classList.toggle('vivid', graphics.vivid);
+    saveSettings();
   }, renderSettings);
   const fs = await isFullscreen();
   chips($('#pick-display'), [{ id: 'window', label: 'Window' }, { id: 'full', label: 'Fullscreen' }], fs ? 'full' : 'window', (v) => setFullscreen(v === 'full'), renderSettings);

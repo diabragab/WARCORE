@@ -31,6 +31,7 @@ body {
 
 #app { position: relative; height: 100%; overflow: hidden; }
 #game { position: absolute; inset: 0; width: 100%; height: 100%; display: block; touch-action: none; }
+#game.vivid { filter: saturate(1.35) contrast(1.12) brightness(1.04); }
 
 .screen, .overlay {
   position: absolute;
