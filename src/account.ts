@@ -112,11 +112,24 @@ export function getPayConfig(): Promise<PayConfig | null> {
 
 /** Opens the Whop checkout for a coin pack in the player's browser. */
 export async function buyPack(pack: string) {
-  const { url } = await call<{ url: string }>('POST', '/api/pay/checkout', { pack });
-  if ('__TAURI_INTERNALS__' in window) {
+  const tauri = '__TAURI_INTERNALS__' in window;
+  // Open the tab during the click so popup blockers allow it. (window.open with 'noopener' always returns null,
+  // which used to look like a blocked popup and opened the checkout a second time in this tab.)
+  const tab = tauri ? null : window.open('', '_blank');
+  let url: string;
+  try {
+    ({ url } = await call<{ url: string }>('POST', '/api/pay/checkout', { pack }));
+  } catch (e) {
+    tab?.close();
+    throw e;
+  }
+  if (tauri) {
     const { openUrl } = await import('@tauri-apps/plugin-opener');
     await openUrl(url);
-  } else if (!window.open(url, '_blank', 'noopener')) {
+  } else if (tab) {
+    tab.opener = null;
+    tab.location.href = url;
+  } else {
     location.href = url;
   }
 }
