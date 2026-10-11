@@ -70,24 +70,25 @@ under "Server address" in the lobby.
 How turns stay in sync: the player whose turn it is runs that turn. Their device streams its aim, sends the exact
 shot, and once everything settles sends the resulting tank state and terrain, so both screens agree before the next turn.
 
-## Accounts and coin purchases (Xsolla)
+## Accounts and coin purchases (Whop)
 
 Players sign in (or create an account) before playing. Accounts live in `DATA_DIR/accounts.json` on the server
 (`C:\warcore\data` on the Windows server, a Docker volume otherwise), with scrypt-hashed passwords.
 
-Coin packs are sold through Xsolla Pay Station (`server/payments.mjs`, packs and prices at the top). Purchases stay
-hidden until these are set on the server. On the Windows server, put them in `C:\warcore\secrets.cmd`:
+Coin packs are sold through Whop checkout (`server/payments.mjs`, packs and prices at the top). The server creates a
+one-time checkout per purchase, and Whop's signed `payment.succeeded` webhook credits the coins (the server re-reads the
+payment from Whop before crediting, once per payment). Purchases stay hidden until these are set. On the Windows server,
+put them in `C:\warcore\secrets.cmd`:
 
 ```bat
-set XSOLLA_MERCHANT_ID=...
-set XSOLLA_PROJECT_ID=...
-set XSOLLA_API_KEY=...
-set XSOLLA_WEBHOOK_SECRET=...
-set XSOLLA_SANDBOX=1
+set WHOP_API_KEY=...
+set WHOP_COMPANY_ID=biz_...
+set WHOP_WEBHOOK_SECRET=ws_...
+set WHOP_SANDBOX=1
 ```
 
-then restart the `WARCORE` scheduled task. In Xsolla Publisher Account set the webhook URL to
-`https://war-core.online/api/xsolla/webhook`. Remove `XSOLLA_SANDBOX` to take real payments.
+then restart the `WARCORE` scheduled task. In Whop, create a webhook for `https://war-core.online/api/whop/webhook`
+with payment (and refund) events. Remove `WHOP_SANDBOX` to take real payments.
 
 ## Desktop app (Tauri 2)
 

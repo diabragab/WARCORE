@@ -110,7 +110,7 @@ export function getPayConfig(): Promise<PayConfig | null> {
   return payConfig;
 }
 
-/** Opens the Xsolla checkout for a coin pack in the player's browser. */
+/** Opens the Whop checkout for a coin pack in the player's browser. */
 export async function buyPack(pack: string) {
   const { url } = await call<{ url: string }>('POST', '/api/pay/checkout', { pack });
   if ('__TAURI_INTERNALS__' in window) {

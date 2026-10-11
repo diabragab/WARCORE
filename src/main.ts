@@ -689,7 +689,7 @@ function openShop() {
   account.getPayConfig().then((c) => ($('#btn-buy').hidden = !c));
 }
 
-// ------------------------------------------------------------------ buying coins (Xsolla)
+// ------------------------------------------------------------------ buying coins (Whop)
 
 let watchTimer: ReturnType<typeof setInterval> | undefined;
 

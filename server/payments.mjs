@@ -1,23 +1,24 @@
-// Coin packs sold through Xsolla Pay Station.
+// Coin packs sold through Whop checkout.
 //
-// Settings (environment variables on the server; payments stay off until all four are set):
-//   XSOLLA_MERCHANT_ID, XSOLLA_PROJECT_ID, XSOLLA_API_KEY   from Publisher Account > Company settings / Project settings
-//   XSOLLA_WEBHOOK_SECRET                                  Project settings > Webhooks > Secret key
-//   XSOLLA_SANDBOX=1                                       test payments (no real money)
-// In Publisher Account set the webhook URL to https://<your domain>/api/xsolla/webhook.
-// Uses Pay Station "simple checkout" (an amount instead of catalog items); ask your Xsolla manager to enable it.
-import { createHash, timingSafeEqual } from 'node:crypto';
+// Settings (environment variables on the server; payments stay off until all three are set):
+//   WHOP_API_KEY         Whop dashboard > Developer > API keys (Account API key, needs payment + plan permissions)
+//   WHOP_COMPANY_ID      your business id, starts with biz_
+//   WHOP_WEBHOOK_SECRET  Developer > Webhooks > your webhook's signing secret (starts with ws_)
+//   WHOP_SANDBOX=1       use Whop's sandbox (test payments, no real money)
+// Create the webhook in Whop pointing at https://<your domain>/api/whop/webhook with the payment events enabled.
+import { createHmac, timingSafeEqual } from 'node:crypto';
 import { creditCoins, json, readBody, readRaw, userByKey, userFor } from './accounts.mjs';
 
 const env = process.env;
-const X = {
-  merchant: env.XSOLLA_MERCHANT_ID,
-  project: Number(env.XSOLLA_PROJECT_ID),
-  apiKey: env.XSOLLA_API_KEY,
-  secret: env.XSOLLA_WEBHOOK_SECRET,
-  sandbox: env.XSOLLA_SANDBOX === '1' || env.XSOLLA_SANDBOX === 'true',
+const W = {
+  apiKey: env.WHOP_API_KEY,
+  company: env.WHOP_COMPANY_ID,
+  secret: env.WHOP_WEBHOOK_SECRET,
+  sandbox: env.WHOP_SANDBOX === '1' || env.WHOP_SANDBOX === 'true',
 };
-const enabled = () => !!(X.merchant && X.project && X.apiKey && X.secret);
+const API = env.WHOP_API_BASE || (W.sandbox ? 'https://sandbox-api.whop.com/api/v1' : 'https://api.whop.com/api/v1');
+const SITE = W.sandbox ? 'https://sandbox.whop.com' : 'https://whop.com';
+const enabled = () => !!(W.apiKey && W.company && W.secret);
 
 export const CURRENCY = 'USD';
 export const PACKS = [
@@ -26,51 +27,85 @@ export const PACKS = [
   { id: 'arsenal', name: 'War Chest', coins: 8000, price: 9.99, note: '2,000 bonus coins' },
 ];
 
-async function createCheckout(user, key, pack) {
-  const auth = Buffer.from(`${X.merchant}:${X.apiKey}`).toString('base64');
-  const res = await fetch(`https://api.xsolla.com/merchant/v2/merchants/${X.merchant}/token`, {
-    method: 'POST',
-    headers: { authorization: `Basic ${auth}`, 'content-type': 'application/json' },
-    body: JSON.stringify({
-      user: { id: { value: key }, name: { value: user.name } },
-      settings: { project_id: X.project, currency: CURRENCY, language: 'en', ...(X.sandbox ? { mode: 'sandbox' } : {}) },
-      purchase: { checkout: { amount: pack.price, currency: CURRENCY }, description: { value: `${pack.coins.toLocaleString('en-US')} WARCORE coins` } },
-      custom_parameters: { pack: pack.id },
-    }),
+async function whop(method, path, body) {
+  const res = await fetch(API + path, {
+    method,
+    headers: { authorization: `Bearer ${W.apiKey}`, 'content-type': 'application/json' },
+    body: body && JSON.stringify(body),
   });
   const data = await res.json().catch(() => ({}));
-  if (!res.ok || !data.token) throw new Error(`Xsolla token request failed (${res.status}): ${JSON.stringify(data).slice(0, 300)}`);
-  return `https://${X.sandbox ? 'sandbox-' : ''}secure.xsolla.com/paystation4/?token=${encodeURIComponent(data.token)}`;
+  if (!res.ok) throw new Error(`Whop ${method} ${path} failed (${res.status}): ${JSON.stringify(data).slice(0, 300)}`);
+  return data;
 }
 
+async function createCheckout(key, pack, returnTo) {
+  const c = await whop('POST', '/checkout_configurations', {
+    mode: 'payment',
+    plan: { company_id: W.company, currency: CURRENCY.toLowerCase(), initial_price: pack.price, plan_type: 'one_time' },
+    metadata: { warcore_user: key, warcore_pack: pack.id },
+    ...(returnTo ? { redirect_url: returnTo } : {}),
+  });
+  if (!c.purchase_url) throw new Error(`Whop returned no purchase_url: ${JSON.stringify(c).slice(0, 300)}`);
+  return c.purchase_url.startsWith('http') ? c.purchase_url : SITE + c.purchase_url;
+}
+
+/** Standard Webhooks signature: HMAC-SHA256 over "id.timestamp.body", base64, header "v1,<sig>" (space separated list). */
 function signatureOk(req, raw) {
-  const m = /^Signature ([a-f0-9]{40})$/i.exec(req.headers.authorization || '');
-  if (!m) return false;
-  const want = createHash('sha1').update(raw + X.secret).digest();
-  return timingSafeEqual(Buffer.from(m[1].toLowerCase(), 'hex'), want);
+  const id = req.headers['webhook-id'];
+  const ts = req.headers['webhook-timestamp'];
+  const sigs = String(req.headers['webhook-signature'] || '').split(' ');
+  if (!id || !ts || Math.abs(Date.now() / 1000 - Number(ts)) > 300) return false;
+  // Whop says to use the ws_ secret exactly as given; also accept the whsec_<base64> form other tools use.
+  const keys = [Buffer.from(W.secret, 'utf8')];
+  if (W.secret.startsWith('whsec_')) keys.push(Buffer.from(W.secret.slice(6), 'base64'));
+  for (const k of keys) {
+    const want = createHmac('sha256', k).update(`${id}.${ts}.${raw}`).digest();
+    for (const s of sigs) {
+      const [v, b64] = s.split(',');
+      const got = v === 'v1' && b64 ? Buffer.from(b64, 'base64') : null;
+      if (got && got.length === want.length && timingSafeEqual(got, want)) return true;
+    }
+  }
+  return false;
 }
 
-/** Handles /api/pay/* and the Xsolla webhook. Returns false for other paths. */
+const seen = new Set();
+
+/** Looks the payment up in Whop (rather than trusting the webhook body) and credits or removes the coins. */
+async function settle(paymentId, refund) {
+  const p = await whop('GET', `/payments/${encodeURIComponent(paymentId)}`);
+  const key = p.metadata?.warcore_user;
+  const pack = PACKS.find((x) => x.id === p.metadata?.warcore_pack);
+  if (!key || !pack || !userByKey(key)) return console.log(`Whop payment ${paymentId}: not a WARCORE coin pack, ignored`);
+  if (refund) {
+    if (Number(p.refunded_amount) > 0 || /refund/.test(String(p.status))) creditCoins(key, -pack.coins, `refund:${paymentId}`);
+  } else if (p.status === 'paid' || p.status === 'succeeded' || p.substatus === 'succeeded') {
+    creditCoins(key, pack.coins, paymentId);
+  } else return console.log(`Whop payment ${paymentId} has status ${p.status}, not crediting yet`);
+  console.log(`Whop ${refund ? 'refund' : 'payment'} ${paymentId}: ${pack.id} for ${key}`);
+}
+
+/** Handles /api/pay/* and the Whop webhook. Returns false for other paths. */
 export async function handlePayments(req, res, path) {
-  if (path === '/api/xsolla/webhook' && req.method === 'POST') {
+  if (path === '/api/whop/webhook' && req.method === 'POST') {
     const raw = await readRaw(req);
-    if (!enabled() || !signatureOk(req, raw)) return json(res, 400, { error: { code: 'INVALID_SIGNATURE', message: 'Invalid signature' } }), true;
-    const n = JSON.parse(raw);
-    const userKey = n.user?.id;
-    if (n.notification_type === 'user_validation') {
-      return userByKey(userKey) ? (res.writeHead(204).end(), true) : (json(res, 400, { error: { code: 'INVALID_USER', message: 'Invalid user' } }), true);
+    if (!enabled() || !signatureOk(req, raw)) return json(res, 401, { error: 'invalid signature' }), true;
+    const msgId = String(req.headers['webhook-id']);
+    if (seen.has(msgId)) return res.writeHead(200).end(), true;
+    const e = JSON.parse(raw);
+    const d = e.data || {};
+    const paymentId = String(d.id || '').startsWith('pay_') ? d.id : d.payment?.id || d.payment_id;
+    try {
+      if (paymentId && e.type === 'payment.succeeded') await settle(paymentId, false);
+      else if (paymentId && /refund|dispute/.test(e.type)) await settle(paymentId, true);
+      seen.add(msgId);
+    } catch (err) {
+      console.error(err.message);
+      // Unknown payment: nothing to retry. Anything else gets a non-2xx so Whop retries the delivery later.
+      if (/\(404\)/.test(err.message)) return res.writeHead(200).end(), true;
+      return json(res, 500, { error: 'temporary failure' }), true;
     }
-    if (n.notification_type === 'payment' || n.notification_type === 'refund') {
-      const pack = PACKS.find((p) => p.id === n.custom_parameters?.pack);
-      const tx = String(n.transaction?.id ?? '');
-      if (!pack || !tx) return json(res, 400, { error: { code: 'INVALID_PARAMETER', message: 'Unknown purchase' } }), true;
-      const refund = n.notification_type === 'refund';
-      if (!creditCoins(userKey, refund ? -pack.coins : pack.coins, refund ? `refund:${tx}` : tx)) {
-        return json(res, 400, { error: { code: 'INVALID_USER', message: 'Invalid user' } }), true;
-      }
-      console.log(`Xsolla ${n.notification_type}: ${tx} ${pack.id} for ${userKey}`);
-    }
-    return res.writeHead(204).end(), true;
+    return res.writeHead(200).end(), true;
   }
 
   if (!path.startsWith('/api/pay/')) return false;
@@ -80,7 +115,7 @@ export async function handlePayments(req, res, path) {
   if (req.method === 'OPTIONS') return res.writeHead(204).end(), true;
 
   if (path === '/api/pay/config' && req.method === 'GET') {
-    return json(res, 200, { enabled: enabled(), sandbox: X.sandbox, currency: CURRENCY, packs: PACKS }), true;
+    return json(res, 200, { enabled: enabled(), sandbox: W.sandbox, currency: CURRENCY, packs: PACKS }), true;
   }
   if (path === '/api/pay/checkout' && req.method === 'POST') {
     if (!enabled()) return json(res, 503, { error: 'Coin purchases are not available yet.' }), true;
@@ -89,8 +124,10 @@ export async function handlePayments(req, res, path) {
     const body = await readBody(req).catch(() => ({}));
     const pack = PACKS.find((p) => p.id === body.pack);
     if (!pack) return json(res, 400, { error: 'Unknown coin pack.' }), true;
+    const host = req.headers['x-forwarded-host'] || req.headers.host;
+    const returnTo = host && !/^(127\.|localhost)/.test(host) ? `https://${host}/play/` : undefined;
     try {
-      return json(res, 200, { url: await createCheckout(who.user, who.key, pack) }), true;
+      return json(res, 200, { url: await createCheckout(who.key, pack, returnTo) }), true;
     } catch (e) {
       console.error(e.message);
       return json(res, 502, { error: "The payment page couldn't be opened. Try again in a moment." }), true;

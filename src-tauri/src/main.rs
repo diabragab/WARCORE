@@ -3,7 +3,7 @@
 
 fn main() {
     tauri::Builder::default()
-        // Opens the Xsolla checkout in the player's browser.
+        // Opens the Whop checkout in the player's browser.
         .plugin(tauri_plugin_opener::init())
         .run(tauri::generate_context!())
         .expect("error while running WARCORE");
