@@ -1,6 +1,6 @@
 import { Terrain, THEMES, W, H, WATER, type Theme } from './terrain';
 import { AIRBOMB, BOMBLET, modelById, weaponById, type Look, type TankModel, type Weapon } from './data';
-import { D2R, drawTank, pivotHeight, roundRect, shade, trailColor } from './draw';
+import { D2R, drawTank, pivotHeight, roundRect, shade, tankFrame, trailColor } from './draw';
 import { mulberry32 } from './rng';
 import { sfx } from './sfx';
 
@@ -398,8 +398,9 @@ export class Game {
       const off = shots > 1 ? (s - (shots - 1) / 2) * (w.spread ?? 0) : 0;
       const a = (t.facing > 0 ? t.elev + off : 180 - t.elev - off) * D2R;
       const speed = (Math.max(4, t.power) / 100) * MAX_SPEED * t.model.powerMul;
-      const bx = pv.x + Math.cos(a) * t.model.geo.barrelL;
-      const by = pv.y - Math.sin(a) * t.model.geo.barrelL;
+      const reach = tankFrame(t.model).barrel;
+      const bx = pv.x + Math.cos(a) * reach;
+      const by = pv.y - Math.sin(a) * reach;
       this.projectiles.push({
         x: bx, y: by, px: bx, py: by, vx: Math.cos(a) * speed, vy: -Math.sin(a) * speed,
         age: 0, owner: t, w, bounces: w.bounces ?? 0, trail: [], look: t.look,
@@ -422,9 +423,15 @@ export class Game {
     this.snd(() => sfx.fire());
   }
 
-  private pivot(t: Tank) {
+  private pivot(t: Tank, facing: number = t.facing) {
     const h = pivotHeight(t.model);
-    return { x: t.x + Math.sin(t.tilt) * h, y: t.y - Math.cos(t.tilt) * h };
+    const fx = facing * tankFrame(t.model).pivotX;
+    return { x: t.x + Math.cos(t.tilt) * fx + Math.sin(t.tilt) * h, y: t.y + Math.sin(t.tilt) * fx - Math.cos(t.tilt) * h };
+  }
+
+  /** Height of a tank's middle above its base point: where blasts and missiles aim. */
+  private midHeight(t: Tank) {
+    return tankFrame(t.model).height * 0.35;
   }
 
   // ---------------------------------------------------------------- update
@@ -701,8 +708,7 @@ export class Game {
   private tankAt(x: number, y: number, owner: Tank | null, age: number): Tank | null {
     for (const t of this.tanks) {
       if (!t.alive || (t === owner && age < 0.3)) continue;
-      const g = t.model.geo;
-      if (Math.abs(x - t.x) < g.bodyW / 2 + 2 && y < t.y + 2 && y > t.y - g.treadH - g.bodyH - g.turretR) return t;
+      if (Math.abs(x - t.x) < t.model.geo.bodyW / 2 + 2 && y < t.y + 2 && y > t.y - tankFrame(t.model).height) return t;
     }
     return null;
   }
@@ -761,7 +767,7 @@ export class Game {
         // A homing missile that reaches a tank strikes it square, wherever it touched the hull.
         const t = this.tankAt(p.x, p.y, p.owner, p.age)!;
         p.x = t.x;
-        p.y = t.y - (t.model.geo.treadH + t.model.geo.bodyH) / 2;
+        p.y = t.y - this.midHeight(t);
       }
       this.impact(p);
     }
@@ -778,11 +784,10 @@ export class Game {
       if (d < bd) (bd = d), (best = t);
     }
     if (!best) return;
-    const g = best.model.geo;
     // Fly in high over the hills, then dive once it's nearly above the target.
     const dx = best.x - p.x;
     const lift = Math.max(0, Math.min(220, (Math.abs(dx) - 50) * 0.45));
-    const want = Math.atan2(best.y - (g.treadH + g.bodyH) / 2 - lift - p.y, dx);
+    const want = Math.atan2(best.y - this.midHeight(best) - lift - p.y, dx);
     const cur = Math.atan2(p.vy, p.vx);
     let diff = want - cur;
     while (diff > Math.PI) diff -= Math.PI * 2;
@@ -881,7 +886,7 @@ export class Game {
     for (const t of this.tanks) {
       if (!t.alive) continue;
       const g = t.model.geo;
-      const cx = t.x, cy = t.y - (g.treadH + g.bodyH) / 2;
+      const cx = t.x, cy = t.y - this.midHeight(t);
       const d = Math.hypot(cx - x, cy - y);
       const reach = r + g.bodyW * 0.3;
       if (d >= reach) continue;
@@ -975,10 +980,11 @@ export class Game {
 
   /** Where a shot would land: same physics as real shells, run ahead of time. */
   private simulate(t: Tank, elev: number, facing: number, power: number) {
-    const pv = this.pivot(t);
+    const pv = this.pivot(t, facing);
     const a = (facing > 0 ? elev : 180 - elev) * D2R;
     const speed = (Math.max(4, power) / 100) * MAX_SPEED * t.model.powerMul;
-    const x = pv.x + Math.cos(a) * t.model.geo.barrelL, y = pv.y - Math.sin(a) * t.model.geo.barrelL;
+    const reach = tankFrame(t.model).barrel;
+    const x = pv.x + Math.cos(a) * reach, y = pv.y - Math.sin(a) * reach;
     const b: Body = { x, y, px: x, py: y, vx: Math.cos(a) * speed, vy: -Math.sin(a) * speed, age: 0, owner: t };
     for (let i = 0; i < 600; i++) {
       const hit = this.advance(b, 1 / 60);
@@ -1117,7 +1123,7 @@ export class Game {
     if (t.ai) return;
     const pv = this.pivot(t);
     const a = (t.facing > 0 ? t.elev : 180 - t.elev) * D2R;
-    const r0 = t.model.geo.barrelL + 8;
+    const r0 = tankFrame(t.model).barrel + 8;
     ctx.save();
     ctx.strokeStyle = 'rgba(255,255,255,0.75)';
     ctx.setLineDash([4, 6]);

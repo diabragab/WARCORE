@@ -1,0 +1,8 @@
+{
+  "name": "tank-art",
+  "private": true,
+  "type": "module",
+  "description": "Renders the 3D tank in art/tank into the 2D sprite sheet the game draws (src/assets/tank3d.*).",
+  "scripts": { "build": "node build.mjs" },
+  "dependencies": { "three": "0.170.0" }
+}

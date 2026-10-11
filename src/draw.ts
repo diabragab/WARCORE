@@ -1,4 +1,6 @@
 import type { Look, TankModel } from './data';
+import SHEET_URL from './assets/tank3d.png';
+import SHEET from './assets/tank3d.json';
 
 export const D2R = Math.PI / 180;
 
@@ -10,8 +12,95 @@ export function shade(hex: string, amt: number): string {
   return `rgb(${ch[0]},${ch[1]},${ch[2]})`;
 }
 
+// ---------------------------------------------------------------- 3D-rendered tank art
+// src/assets/tank3d.png is rendered from art/tank by tools/tank-art: body, turret and barrel,
+// lit with the paint in white, plus each part's paint mask. We tint the paint per colour.
+
+type PartName = 'body' | 'turret' | 'barrel';
+type Anchor = [number, number];
+interface Part { x: number; y: number; maskY: number; w: number; h: number; anchors: Record<string, Anchor> }
+const PARTS = SHEET.parts as unknown as Record<PartName, Part>;
+const sheet = new Image();
+let sheetReady = false;
+const onReady: (() => void)[] = [];
+sheet.onload = () => {
+  sheetReady = true;
+  onReady.splice(0).forEach((f) => f());
+};
+sheet.src = SHEET_URL;
+
+/** Runs `f` once the tank art has loaded (right away if it already has). */
+export function whenTankArtReady(f: () => void) {
+  if (sheetReady) f();
+  else onReady.push(f);
+}
+
+const tinted = new Map<string, HTMLCanvasElement>();
+function partArt(name: PartName, paint: string): HTMLCanvasElement {
+  const key = name + paint;
+  let c = tinted.get(key);
+  if (c) return c;
+  const p = PARTS[name];
+  c = document.createElement('canvas');
+  c.width = p.w;
+  c.height = p.h;
+  const g = c.getContext('2d')!;
+  g.drawImage(sheet, p.x, p.y, p.w, p.h, 0, 0, p.w, p.h);
+  const tint = document.createElement('canvas');
+  tint.width = p.w;
+  tint.height = p.h;
+  const tg = tint.getContext('2d')!;
+  tg.drawImage(sheet, p.x, p.maskY, p.w, p.h, 0, 0, p.w, p.h);
+  tg.globalCompositeOperation = 'source-in';
+  tg.fillStyle = paint;
+  tg.fillRect(0, 0, p.w, p.h);
+  g.globalCompositeOperation = 'multiply';
+  g.drawImage(tint, 0, 0);
+  tinted.set(key, c);
+  return c;
+}
+
+/** A tank's size on screen, in world pixels, measured from the middle of its tracks on the ground. */
+export interface TankFrame {
+  /** Sprite pixels to world pixels. */
+  k: number;
+  /** Barrel stretch along and across its length, so long-gun tanks look the part. */
+  sx: number;
+  sy: number;
+  /** Barrel hinge: forward of the middle (in the facing direction) and above the ground. */
+  pivotX: number;
+  pivotY: number;
+  /** Hinge to muzzle. */
+  barrel: number;
+  /** Ground to turret roof. */
+  height: number;
+  /** Ground to the antenna tip: the art's full height. */
+  tall: number;
+}
+const frames = new Map<string, TankFrame>();
+export function tankFrame(m: TankModel): TankFrame {
+  let f = frames.get(m.id);
+  if (f) return f;
+  const g = m.geo;
+  const a = PARTS.body.anchors;
+  // Sizes follow each model's hull width; the Patton's proportions are the reference for the gun.
+  const k = (g.bodyW * 0.19) / SHEET.ppu;
+  const sx = g.barrelL / g.bodyW / (22 / 34);
+  const sy = g.barrelW / g.bodyW / (4 / 34);
+  f = {
+    k, sx, sy,
+    pivotX: (a.pivot[0] - a.base[0]) * k,
+    pivotY: (a.base[1] - a.pivot[1]) * k,
+    barrel: (a.muzzle[0] - a.pivot[0]) * k * sx,
+    height: (a.base[1] - a.top[1]) * k,
+    tall: PARTS.turret.anchors.base[1] * k,
+  };
+  frames.set(m.id, f);
+  return f;
+}
+
 /** Height of the barrel pivot above the tank's base point. */
-export const pivotHeight = (m: TankModel) => m.geo.treadH + m.geo.bodyH + m.geo.turretR * 0.45;
+export const pivotHeight = (m: TankModel) => tankFrame(m).pivotY;
 
 export function drawTank(
   ctx: CanvasRenderingContext2D,
@@ -24,6 +113,66 @@ export function drawTank(
   facing: number,
   recoil = 0,
   trackPhase = 0,
+) {
+  if (!sheetReady) return drawClassicTank(ctx, model, look, x, y, tilt, elev, facing, recoil, trackPhase);
+  const f = tankFrame(model);
+  const paint = look.paint;
+  const body = PARTS.body, turret = PARTS.turret, barrel = PARTS.barrel;
+  const hw = (body.w * f.k) / 2;
+
+  // Contact shadow on the ground (not tilted)
+  ctx.save();
+  const sh = ctx.createRadialGradient(x, y + 1, 1, x, y + 1, hw);
+  sh.addColorStop(0, 'rgba(0,0,0,0.45)');
+  sh.addColorStop(1, 'rgba(0,0,0,0)');
+  ctx.fillStyle = sh;
+  ctx.beginPath();
+  ctx.ellipse(x, y + 1, hw, 6, 0, 0, Math.PI * 2);
+  ctx.fill();
+  ctx.restore();
+
+  ctx.save();
+  ctx.translate(x, y);
+  ctx.rotate(tilt);
+
+  // Barrel keeps its world angle while the hull tilts with the ground; it sits behind the turret.
+  ctx.save();
+  ctx.translate(facing * f.pivotX, -f.pivotY);
+  ctx.rotate(-tilt);
+  ctx.scale(facing, 1);
+  ctx.rotate(-elev * D2R);
+  const bp = barrel.anchors.pivot;
+  ctx.drawImage(partArt('barrel', paint), -bp[0] * f.k * f.sx - recoil, -bp[1] * f.k * f.sy, barrel.w * f.k * f.sx, barrel.h * f.k * f.sy);
+  ctx.restore();
+
+  ctx.scale(facing, 1);
+  const b0 = body.anchors.base;
+  ctx.drawImage(partArt('body', paint), -b0[0] * f.k, -b0[1] * f.k, body.w * f.k, body.h * f.k);
+  const t0 = turret.anchors.base;
+  ctx.drawImage(partArt('turret', paint), -t0[0] * f.k, -t0[1] * f.k, turret.w * f.k, turret.h * f.k);
+
+  if (look.decal && look.decal !== 'none') {
+    const a = body.anchors;
+    ctx.save();
+    ctx.translate((a.panel[0] - b0[0]) * f.k, (a.panel[1] - b0[1]) * f.k);
+    drawDecal(ctx, look.decal, (a.panelR[0] - a.panelL[0]) * f.k, (a.panel[1] - a.panelT[1]) * 2.2 * f.k, paint);
+    ctx.restore();
+  }
+  ctx.restore();
+}
+
+/** The original hand-drawn tank, used until the 3D art has loaded. */
+function drawClassicTank(
+  ctx: CanvasRenderingContext2D,
+  model: TankModel,
+  look: Look,
+  x: number,
+  y: number,
+  tilt: number,
+  elev: number,
+  facing: number,
+  recoil: number,
+  trackPhase: number,
 ) {
   const g = model.geo;
   const paint = look.paint;
@@ -48,7 +197,7 @@ export function drawTank(
 
   // Barrel keeps its world angle while the hull tilts with the ground.
   ctx.save();
-  ctx.translate(0, -pivotHeight(model));
+  ctx.translate(0, -(g.treadH + g.bodyH + g.turretR * 0.45));
   ctx.rotate(-tilt + (facing > 0 ? -elev * D2R : Math.PI + elev * D2R));
   const bw = g.barrelW;
   const bg = ctx.createLinearGradient(0, -bw / 2, 0, bw / 2);
@@ -138,7 +287,10 @@ export function drawTank(
   ctx.lineTo(hw - 2, hullTop + g.bodyH * 0.55);
   ctx.stroke();
 
-  drawDecal(ctx, look.decal, model, paint);
+  ctx.save();
+  ctx.translate(0, -g.treadH - g.bodyH * 0.45);
+  drawDecal(ctx, look.decal, g.bodyW, g.bodyH, paint);
+  ctx.restore();
 
   // Side skirt over the top of the tracks, with rivets
   const skY = -g.treadH - 1;
@@ -188,9 +340,10 @@ export function drawTank(
   ctx.restore();
 }
 
-function drawDecal(ctx: CanvasRenderingContext2D, decal: string, m: TankModel, paint: string) {
-  const g = m.geo;
-  const cy = -g.treadH - g.bodyH * 0.45;
+/** Draws a decal centred on (0, 0) on a hull side `bodyW` wide and `bodyH` tall. */
+function drawDecal(ctx: CanvasRenderingContext2D, decal: string, bodyW: number, bodyH: number, paint: string) {
+  const g = { bodyW, bodyH };
+  const cy = 0;
   const light = '#f2ead2';
   ctx.save();
   switch (decal) {

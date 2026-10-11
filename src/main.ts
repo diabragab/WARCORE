@@ -7,7 +7,7 @@ import './style.css';
 import { Game, type Difficulty, type MatchResult, type PlayerSetup } from './game';
 import { Online, type OnlineReward } from './online';
 import { DECALS, MODELS, PAINTS, TRAILS, WEAPONS, modelById, paintById, rankFor, type Cosmetic, type Look } from './data';
-import { drawTank, trailColor } from './draw';
+import { drawTank, tankFrame, trailColor, whenTankArtReady } from './draw';
 import { THEMES } from './terrain';
 import { loadProfile, normalize, owns, saveProfile, type Profile } from './profile';
 import * as account from './account';
@@ -827,9 +827,12 @@ function previewTank(c: HTMLCanvasElement, modelId: string, look: Look) {
   g.fillStyle = '#4a3e36';
   g.fillRect(0, 82, 200, 2);
   g.save();
-  g.translate(96, 82);
-  g.scale(1.5, 1.5);
-  drawTank(g, modelById(modelId), look, 0, 0, 0, 35, 1);
+  g.translate(92, 84);
+  const model = modelById(modelId);
+  // One scale for every model, so the shop shows how big each tank really is.
+  const s = 80 / Math.max(...MODELS.map((m) => tankFrame(m).tall));
+  g.scale(s, s);
+  drawTank(g, model, look, 0, 0, 0, 35, 1);
   g.restore();
 }
 
@@ -1029,6 +1032,11 @@ function shopError(msg: string) {
   $('#shop-coins').textContent = String(profile.coins);
   alert(msg);
 }
+
+// Shop previews drawn before the tank art loaded used the old look; redraw them once it's in.
+whenTankArtReady(() => {
+  if (!$('#shop').hidden) renderShop();
+});
 
 function openShop() {
   renderShop();

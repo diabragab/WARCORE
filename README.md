@@ -108,6 +108,19 @@ loses). Quick online matches are ranked: Elo from 1000 (K=32), Bronze to Diamond
 first. Each player also gets a daily reward (with a streak) and three daily missions. `GET /api/leaderboard` feeds the
 leaderboard screen and the landing page.
 
+## Tank art
+
+Tanks are drawn from `src/assets/tank3d.png`, rendered from the low-poly 3D tank in `art/tank/` (`tank_separete.blend`,
+exported as `.3ds`). The sheet holds the body, turret and barrel, lit with the paint in white, plus each part's paint
+mask; the game tints the paint to the player's colour and aims the barrel. Each model scales the art to its hull width
+and stretches the gun to its barrel length. To re-render after changing the model:
+
+```sh
+cd tools/tank-art && npm install && npm run build   # writes src/assets/tank3d.png and tank3d.json
+```
+
+The tool needs Playwright with Chromium (set `PLAYWRIGHT_MODULE` and `CHROMIUM_PATH` if they aren't installed there).
+
 ## Desktop app (Tauri 2)
 
 Needs Rust (https://rustup.rs) plus the platform prerequisites from https://tauri.app/start/prerequisites/.
@@ -126,6 +139,7 @@ so the Windows app connects to your server for online play.
 - `src/game.ts`: match simulation, physics, AI, rendering
 - `src/terrain.ts`: bitmap terrain and themes
 - `src/data.ts`: weapons, tank models and cosmetics
+- `src/draw.ts`: tank drawing (`src/assets/tank3d.*`, made by `tools/tank-art` from `art/tank`)
 - `shared/catalog.json`: prices, VIP items, maps and ranks (read by the game and the server)
 - `src/main.ts`: menus, setup, shop, input
 - `src/online.ts`: online lobby and connection
