@@ -65,7 +65,7 @@ npm run tauri build  # installers in src-tauri/target/release/bundle/
 ```
 
 `.github/workflows/desktop.yml` builds the Windows installer (.msi and setup .exe) on GitHub on every push to `main`;
-download it from the run's artifacts. Set the repo variable `WARCORE_SERVER_URL` (e.g. `wss://warcore.example.com`)
+download it from the run's artifacts. Pushing a `v*` tag (e.g. `v0.1.0`) also publishes it as a GitHub Release. Set the repo variable `WARCORE_SERVER_URL` (e.g. `wss://warcore.example.com`)
 so the Windows app connects to your server for online play.
 
 ## Layout
