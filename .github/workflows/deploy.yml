@@ -1,0 +1,28 @@
+name: Deploy to server
+
+# Redeploys on every push to main once these repo secrets exist:
+#   DEPLOY_HOST (server address), DEPLOY_USER (e.g. root), DEPLOY_SSH_KEY (private key allowed on the server)
+on:
+  push:
+    branches: [main]
+  workflow_dispatch:
+
+jobs:
+  deploy:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Check secrets
+        id: check
+        env:
+          HOST: ${{ secrets.DEPLOY_HOST }}
+        run: echo "ready=$([ -n "$HOST" ] && echo yes || echo no)" >> "$GITHUB_OUTPUT"
+      - name: Pull and restart on the server
+        if: steps.check.outputs.ready == 'yes'
+        env:
+          HOST: ${{ secrets.DEPLOY_HOST }}
+          USER: ${{ secrets.DEPLOY_USER }}
+          KEY: ${{ secrets.DEPLOY_SSH_KEY }}
+        run: |
+          mkdir -p ~/.ssh && echo "$KEY" > ~/.ssh/id && chmod 600 ~/.ssh/id
+          ssh -i ~/.ssh/id -o StrictHostKeyChecking=accept-new "$USER@$HOST" \
+            'cd /opt/tanks && git pull --ff-only && cd deploy && docker compose up -d --build'

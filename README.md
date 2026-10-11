@@ -34,7 +34,16 @@ so one deploy hosts both.
 npm run build && npm run server   # http://localhost:8787, online play works between browsers on that address
 ```
 
-Deploy: `Dockerfile` runs it anywhere that runs containers; `render.yaml` sets it up on Render's free tier.
+Deploy on your own server (Linux, ports 80 and 443 open, a DNS A record for your domain pointing at it):
+
+```sh
+curl -fsSL https://raw.githubusercontent.com/diabragab/tanks/main/deploy/install.sh | DOMAIN=tanks.example.com sh
+```
+
+That installs Docker if needed and runs the game behind Caddy with automatic HTTPS. To redeploy on every push to
+`main`, add repo secrets `DEPLOY_HOST`, `DEPLOY_USER` and `DEPLOY_SSH_KEY` (see `.github/workflows/deploy.yml`).
+
+Other hosts: `Dockerfile` runs it anywhere that runs containers; `render.yaml` sets it up on Render's free tier.
 The desktop app and other builds find the server through `VITE_SERVER_URL` at build time
 (for example `VITE_SERVER_URL=wss://tanks.onrender.com npm run tauri build`). Players can also type an address
 under "Server address" in the lobby.

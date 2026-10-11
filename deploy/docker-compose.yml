@@ -1,0 +1,25 @@
+# Runs the game + match server behind Caddy, which gets a free HTTPS certificate for your domain.
+# Usage on the server:  DOMAIN=tanks.example.com docker compose up -d --build
+services:
+  tanks:
+    build: ..
+    restart: unless-stopped
+    environment:
+      PORT: 8787
+  caddy:
+    image: caddy:2
+    restart: unless-stopped
+    ports:
+      - "80:80"
+      - "443:443"
+    environment:
+      DOMAIN: ${DOMAIN:?Set DOMAIN to your game's domain, e.g. DOMAIN=tanks.example.com}
+    volumes:
+      - ./Caddyfile:/etc/caddy/Caddyfile:ro
+      - caddy_data:/data
+      - caddy_config:/config
+    depends_on:
+      - tanks
+volumes:
+  caddy_data:
+  caddy_config:
