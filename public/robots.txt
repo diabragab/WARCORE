@@ -1,0 +1,3 @@
+User-agent: *
+Allow: /
+Sitemap: https://war-core.online/sitemap.xml

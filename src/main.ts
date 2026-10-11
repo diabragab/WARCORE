@@ -423,9 +423,20 @@ function renderAccount(status = '') {
     accMode === 'login'
       ? 'Signing in loads the progress saved on your account.'
       : 'Pick a player name (3 to 16 letters or numbers) and a password of at least 6 characters. Your coins and everything you buy are saved to it.';
+  $('#acc-legal').hidden = accMode !== 'register';
   $('#acc-status').textContent = status;
   $('#acc-status').classList.toggle('error', false);
 }
+
+// The Windows app opens these pages in the player's browser.
+document.querySelectorAll<HTMLAnchorElement>('#acc-legal a').forEach((a) =>
+  a.addEventListener('click', async (e) => {
+    if (!('__TAURI_INTERNALS__' in window)) return;
+    e.preventDefault();
+    const { openUrl } = await import('@tauri-apps/plugin-opener');
+    openUrl(a.href);
+  }),
+);
 
 /** Takes the account's profile from the server, which decides coins and purchases. */
 function useProfile(p: Profile) {

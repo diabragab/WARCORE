@@ -52,3 +52,24 @@ async function loadLeaders() {
   }
 }
 loadLeaders();
+
+/** The Windows installer is served by the game server once it has been uploaded there. */
+async function loadDownload() {
+  const btn = document.getElementById('download-windows') as HTMLAnchorElement;
+  const note = document.getElementById('download-note')!;
+  try {
+    const r = await fetch('/api/download');
+    const d = (await r.json()) as { windows: { file: string; size: number } | null };
+    if (d.windows) {
+      note.textContent = `Windows 10 and 11 · ${(d.windows.size / 1048576).toFixed(1)} MB installer`;
+      return;
+    }
+  } catch {
+    /* fall through */
+  }
+  btn.removeAttribute('href');
+  btn.setAttribute('aria-disabled', 'true');
+  btn.classList.add('disabled');
+  btn.textContent = 'Windows app coming soon';
+}
+loadDownload();

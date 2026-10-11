@@ -90,3 +90,19 @@ section.leaders { padding: 88px clamp(16px, 6vw, 96px) 0; }
 .tag.bronze { color: #d08a52; } .tag.silver { color: #c9d1d9; } .tag.gold { color: #f2c84b; } .tag.platinum { color: #7fe0d6; } .tag.diamond { color: #9ec9ff; }
 .tag.vip { color: #1a1205; background: #f2c84b; border-color: #f2c84b; }
 @media (max-width: 860px) { .board-grid { grid-template-columns: 1fr; } }
+
+.btn.disabled { opacity: 0.55; pointer-events: none; }
+.download-note { margin: 12px 0 0; color: var(--muted); font-size: 14px; }
+.download-note:empty { display: none; }
+.foot-links { display: flex; gap: 20px; }
+.foot-links a { color: var(--muted); text-decoration: none; }
+.foot-links a:hover { color: var(--text); }
+
+/* Privacy and terms pages */
+.legal { max-width: 760px; margin: 0 auto; padding: 56px clamp(16px, 5vw, 32px) 80px; }
+.legal h1 { font-size: clamp(30px, 5vw, 44px); margin-bottom: 8px; }
+.legal .updated { color: var(--muted); margin: 0 0 32px; }
+.legal h2 { font-size: 20px; margin: 36px 0 10px; }
+.legal p, .legal li { color: #d6d2cb; }
+.legal ul { padding-left: 20px; }
+.legal a { color: var(--signal-hi); }

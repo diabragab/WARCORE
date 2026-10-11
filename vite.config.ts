@@ -8,7 +8,7 @@ export default defineConfig({
   build: {
     assetsInlineLimit: process.env.SINGLE ? 100_000_000 : 4096,
     // The game (index.html, also the desktop app) plus the website's landing page.
-    rollupOptions: process.env.SINGLE ? {} : { input: { index: 'index.html', landing: 'landing.html' } },
+    rollupOptions: process.env.SINGLE ? {} : { input: { index: 'index.html', landing: 'landing.html', privacy: 'privacy.html', terms: 'terms.html' } },
   },
   server: { strictPort: true, port: 5173 },
   clearScreen: false,

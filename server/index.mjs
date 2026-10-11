@@ -2,22 +2,47 @@
 // and relays their turn messages. Quick matches are ranked: the server settles the result and ratings.
 // It also serves the built web game from ../dist so one deploy hosts both.
 import { createServer } from 'node:http';
-import { readFile } from 'node:fs/promises';
+import { createReadStream } from 'node:fs';
+import { readdir, readFile, stat } from 'node:fs/promises';
 import { extname, join, normalize } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { WebSocketServer } from 'ws';
 import { handleAccounts } from './accounts.mjs';
 import { CATALOG, handleEconomy, isVip, rankFor, settleOnline } from './economy.mjs';
 import { handlePayments } from './payments.mjs';
-import { userByToken } from './store.mjs';
+import { DATA_DIR, json, userByToken } from './store.mjs';
 
 const PORT = Number(process.env.PORT) || 8787;
 const DIST = fileURLToPath(new URL('../dist/', import.meta.url));
 const THEMES = CATALOG.maps;
-const TYPES = { '.html': 'text/html', '.js': 'text/javascript', '.css': 'text/css', '.woff2': 'font/woff2', '.woff': 'font/woff', '.png': 'image/png', '.svg': 'image/svg+xml', '.webp': 'image/webp', '.ico': 'image/x-icon', '.json': 'application/json' };
+const TYPES = { '.html': 'text/html', '.js': 'text/javascript', '.css': 'text/css', '.woff2': 'font/woff2', '.woff': 'font/woff', '.png': 'image/png', '.jpg': 'image/jpeg', '.svg': 'image/svg+xml', '.webp': 'image/webp', '.ico': 'image/x-icon', '.json': 'application/json', '.txt': 'text/plain', '.xml': 'application/xml' };
+/** Website pages served at clean addresses. */
+const PAGES = { '/': 'landing.html', '/privacy': 'privacy.html', '/terms': 'terms.html' };
+/** The Windows installer offered on the website: the newest .exe in this folder (C:\warcore\downloads on Windows). */
+const DOWNLOADS = process.env.DOWNLOADS_DIR || join(DATA_DIR, '..', 'downloads');
+
+async function latestInstaller() {
+  try {
+    const files = (await readdir(DOWNLOADS)).filter((f) => f.toLowerCase().endsWith('.exe'));
+    const stats = await Promise.all(files.map(async (f) => ({ file: f, ...(await stat(join(DOWNLOADS, f))) })));
+    return stats.sort((a, b) => b.mtimeMs - a.mtimeMs)[0] ?? null;
+  } catch {
+    return null;
+  }
+}
 
 const http = createServer(async (req, res) => {
   if (req.url === '/health') return res.end('ok');
+  if (req.url === '/api/download') {
+    const f = await latestInstaller();
+    return json(res, 200, { windows: f && { file: f.file, size: f.size } });
+  }
+  if (req.url === '/download/windows') {
+    const f = await latestInstaller();
+    if (!f) return res.writeHead(302, { location: '/#download' }).end();
+    res.writeHead(200, { 'content-type': 'application/octet-stream', 'content-length': f.size, 'content-disposition': 'attachment; filename="WARCORE-Setup.exe"' });
+    return createReadStream(join(DOWNLOADS, f.file)).pipe(res);
+  }
   if (req.url?.startsWith('/api/')) {
     try {
       const p = req.url.split('?')[0];
@@ -31,7 +56,7 @@ const http = createServer(async (req, res) => {
   const url = (req.url || '/').split('?')[0];
   // The website: "/" is the landing page and the game lives at "/play/".
   if (url === '/play') return res.writeHead(301, { location: '/play/' }).end();
-  const page = url === '/' ? 'landing.html' : url.startsWith('/play/') ? url.slice(5) : url;
+  const page = PAGES[url] ?? (url.startsWith('/play/') ? url.slice(5) : url);
   const path = normalize(decodeURIComponent(page)).replace(/^([/\\])+/, '');
   try {
     const file = join(DIST, path === '' ? 'index.html' : path);

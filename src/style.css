@@ -267,3 +267,4 @@ h2 { margin: 0; font-family: var(--display); font-weight: 700; font-size: 32px; 
 @media (max-width: 640px) {
   .side-card { max-width: none; }
 }
+.hint a { color: var(--signal-hi); }

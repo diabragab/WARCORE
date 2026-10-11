@@ -5,9 +5,21 @@
 <meta name="viewport" content="width=device-width, initial-scale=1">
 <title>WARCORE: Armored Warfare</title>
 <meta name="description" content="WARCORE is a free turn-based tank artillery game. Battle the computer, survive arcade waves, or get matched online. Play in your browser or on Windows.">
+<meta name="theme-color" content="#0b0c0f">
+<link rel="canonical" href="https://war-core.online/">
+<meta property="og:type" content="website">
+<meta property="og:site_name" content="WARCORE">
+<meta property="og:url" content="https://war-core.online/">
 <meta property="og:title" content="WARCORE: Armored Warfare">
-<meta property="og:description" content="Turn-based tank artillery. Read the wind, set your angle, and blow the ground out from under your rival.">
-<meta property="og:image" content="/media/banner-1200.webp">
+<meta property="og:description" content="Free turn-based tank artillery. Ranked online matches, arcade waves and a garage full of tanks. Play in your browser or on Windows.">
+<meta property="og:image" content="https://war-core.online/media/og.jpg">
+<meta property="og:image:width" content="1200">
+<meta property="og:image:height" content="630">
+<meta property="og:image:alt" content="WARCORE: Armored Warfare. Battle. Upgrade. Dominate.">
+<meta name="twitter:card" content="summary_large_image">
+<meta name="twitter:title" content="WARCORE: Armored Warfare">
+<meta name="twitter:description" content="Free turn-based tank artillery. Ranked online matches, arcade waves and a garage full of tanks.">
+<meta name="twitter:image" content="https://war-core.online/media/og.jpg">
 <link rel="icon" type="image/png" href="/src-tauri/icons/64x64.png">
 <link rel="apple-touch-icon" href="/src-tauri/icons/128x128@2x.png">
 <script type="module" src="/src/landing.ts"></script>
@@ -122,14 +134,19 @@
       <p class="lead">Jump in right from your browser, or install the Windows app for full-screen play. Your account and everything you've unlocked follow you to both.</p>
       <div class="cta">
         <a class="btn primary big" href="/play/">Play in your browser</a>
-        <a class="btn ghost big" href="https://github.com/diabragab/tanks/releases/latest">Download for Windows</a>
+        <a class="btn ghost big" id="download-windows" href="/download/windows">Download for Windows</a>
       </div>
+      <p class="download-note" id="download-note"></p>
     </div>
   </section>
 </main>
 
 <footer class="foot">
   <img src="/src/assets/logo.webp" alt="WARCORE" width="1100" height="550">
+  <nav class="foot-links" aria-label="Legal">
+    <a href="/privacy">Privacy</a>
+    <a href="/terms">Terms</a>
+  </nav>
   <p>© <span id="year"></span> WARCORE. All rights reserved.</p>
 </footer>
 </body>
