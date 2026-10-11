@@ -1,6 +1,7 @@
 import { Terrain, THEMES, W, H, WATER, type Theme } from './terrain';
 import { AIRBOMB, BOMBLET, modelById, weaponById, type Look, type TankModel, type Weapon } from './data';
-import { D2R, drawTank, pivotHeight, roundRect, shade, tankFrame, trailColor } from './draw';
+import { D2R, drawDecal3D, drawTank, pivotHeight, roundRect, shade, tankFrame, trailColor } from './draw';
+import { getRenderer3D, look3d } from './render3d';
 import { mulberry32 } from './rng';
 import { sfx } from './sfx';
 
@@ -1079,10 +1080,21 @@ export class Game {
 
     ctx.drawImage(this.bg, 0, 0);
     this.drawClouds(ctx);
-    ctx.drawImage(this.terrain.image, 0, 0);
-
-    for (const t of this.tanks) if (!t.alive && !t.drowned) this.drawWreck(ctx, t);
-    for (const t of this.tanks) if (t.alive) drawTank(ctx, t.model, t.look, t.x, t.y, t.tilt, t.elev, t.facing, t.recoil, t.trackPhase);
+    const r3 = look3d.enabled ? getRenderer3D() : null;
+    if (r3?.ready) {
+      // The 3D ground and tanks, rendered to exactly the world rectangle.
+      const img = r3.render(this.terrain, this.theme, this.tanks, Math.max(1, Math.round(W * scale)), Math.max(1, Math.round(H * scale)));
+      ctx.drawImage(img, 0, 0, W, H);
+      for (const t of this.tanks) {
+        if (!t.alive && !t.drowned) this.wreckSmoke(t);
+        const spot = t.alive && r3.decalSpot(t);
+        if (spot) drawDecal3D(ctx, t.model, t.look, spot.x, spot.y, t.tilt, t.facing, spot.zoom);
+      }
+    } else {
+      ctx.drawImage(this.terrain.image, 0, 0);
+      for (const t of this.tanks) if (!t.alive && !t.drowned) this.drawWreck(ctx, t);
+      for (const t of this.tanks) if (t.alive) drawTank(ctx, t.model, t.look, t.x, t.y, t.tilt, t.elev, t.facing, t.recoil, t.trackPhase);
+    }
     if (this.phase === 'aim' && !this.opts.demo) this.drawAimGuide(ctx, this.current);
     this.drawProjectiles(ctx);
     this.drawParticles(ctx);
@@ -1109,6 +1121,11 @@ export class Game {
     ctx.globalAlpha = 0.85;
     drawTank(ctx, t.model, { ...t.look, paint: '#3a3633', decal: 'none' }, t.x, t.y, t.tilt + 0.15, -10, t.facing);
     ctx.restore();
+    this.wreckSmoke(t);
+  }
+
+  /** Smoke and flames rising from a destroyed tank. */
+  private wreckSmoke(t: Tank) {
     if (Math.random() < 0.12)
       this.particles.push({
         x: t.x + (Math.random() - 0.5) * 12, y: t.y - 16, vx: 0, vy: -25, life: 2.2, max: 2.2, size: 10, color: '#3d3833', kind: 'smoke', grav: -6,

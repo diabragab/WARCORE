@@ -43,6 +43,8 @@ export class Terrain {
   ctx: CanvasRenderingContext2D;
   private lit: HTMLCanvasElement;
   private dirty = true;
+  /** Goes up whenever the ground changes, so the 3D ground knows to rebuild. */
+  version = 0;
 
   constructor(seed: number, public theme: Theme) {
     this.canvas = document.createElement('canvas');
@@ -202,6 +204,7 @@ export class Terrain {
     }
     this.ctx.clearRect(0, 0, W, H);
     this.dirty = true;
+    this.version++;
     this.paint(mulberry32(seed ^ 0x5bd1e995));
   }
 
@@ -233,6 +236,7 @@ export class Terrain {
 
   carve(cx: number, cy: number, r: number) {
     this.dirty = true;
+    this.version++;
     this.forCircle(cx, cy, r, (i) => (this.mask[i] = 0));
     const c = this.ctx;
     c.save();
@@ -254,6 +258,7 @@ export class Terrain {
 
   add(cx: number, cy: number, r: number) {
     this.dirty = true;
+    this.version++;
     this.forCircle(cx, cy, r, (i) => (this.mask[i] = 1));
     const c = this.ctx;
     const [r1, g1, b1] = this.theme.dirt;

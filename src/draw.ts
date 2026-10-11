@@ -161,6 +161,18 @@ export function drawTank(
   ctx.restore();
 }
 
+/** A decal on the side of a 3D tank, centred at (x, y) on screen. */
+export function drawDecal3D(ctx: CanvasRenderingContext2D, model: TankModel, look: Look, x: number, y: number, tilt: number, facing: number, zoom: number) {
+  if (!look.decal || look.decal === 'none') return;
+  const u = model.geo.bodyW * 0.19 * zoom; // world pixels per model unit
+  ctx.save();
+  ctx.translate(x, y);
+  ctx.rotate(tilt);
+  ctx.scale(facing, 1);
+  drawDecal(ctx, look.decal, 3.9 * u, 1.5 * u, look.paint);
+  ctx.restore();
+}
+
 /** The original hand-drawn tank, used until the 3D art has loaded. */
 function drawClassicTank(
   ctx: CanvasRenderingContext2D,

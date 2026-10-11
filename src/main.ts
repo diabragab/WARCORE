@@ -8,6 +8,7 @@ import { Game, type Difficulty, type MatchResult, type PlayerSetup } from './gam
 import { Online, type OnlineReward } from './online';
 import { DECALS, MODELS, PAINTS, TRAILS, WEAPONS, modelById, paintById, rankFor, type Cosmetic, type Look } from './data';
 import { drawTank, tankFrame, trailColor, whenTankArtReady } from './draw';
+import { look3d } from './render3d';
 import { THEMES } from './terrain';
 import { loadProfile, normalize, owns, saveProfile, type Profile } from './profile';
 import * as account from './account';
@@ -313,6 +314,7 @@ try {
   const saved = JSON.parse(localStorage.getItem(SETTINGS_KEY) || '{}');
   sfx.muted = saved.muted === true;
   graphics.vivid = saved.vivid !== false;
+  look3d.enabled = saved.look !== '2d';
 } catch {
   /* defaults */
 }
@@ -320,7 +322,7 @@ canvas.classList.toggle('vivid', graphics.vivid);
 
 function saveSettings() {
   try {
-    localStorage.setItem(SETTINGS_KEY, JSON.stringify({ muted: sfx.muted, vivid: graphics.vivid }));
+    localStorage.setItem(SETTINGS_KEY, JSON.stringify({ muted: sfx.muted, vivid: graphics.vivid, look: look3d.enabled ? '3d' : '2d' }));
   } catch {
     /* ignore */
   }
@@ -354,6 +356,10 @@ async function isFullscreen(): Promise<boolean> {
 async function renderSettings() {
   chips($('#pick-sound'), [{ id: 'on', label: 'On' }, { id: 'off', label: 'Off' }], sfx.muted ? 'off' : 'on', (v) => {
     sfx.muted = v === 'off';
+    saveSettings();
+  }, renderSettings);
+  chips($('#pick-look'), [{ id: '3d', label: '3D' }, { id: '2d', label: 'Classic 2D' }], look3d.enabled ? '3d' : '2d', (v) => {
+    look3d.enabled = v === '3d';
     saveSettings();
   }, renderSettings);
   chips($('#pick-colors'), [{ id: 'vivid', label: 'Vivid HDR' }, { id: 'natural', label: 'Natural' }], graphics.vivid ? 'vivid' : 'natural', (v) => {

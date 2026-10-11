@@ -121,6 +121,15 @@ cd tools/tank-art && npm install && npm run build   # writes src/assets/tank3d.p
 
 The tool needs Playwright with Chromium (set `PLAYWRIGHT_MODULE` and `CHROMIUM_PATH` if they aren't installed there).
 
+### 3D look
+
+By default the ground and tanks are drawn in 3D with three.js (`src/render3d.ts`); Settings > Graphics switches back
+to the classic 2D drawing. The game itself is unchanged: everything still happens on the flat gameplay plane, and the
+camera looks at that plane square-on from above with an off-centre lens, so shells, explosions and labels (still drawn
+in 2D) line up with the 3D scene. The ground is the terrain outline (`src/terrain3d.ts`, marching squares) extruded
+into a slab and rebuilt after every blast; its face shows the painted 2D terrain. The tank is a simplified copy of the
+model, made with `node tools/tank-art/mesh.mjs` (writes `src/assets/tank3d-mesh.*`).
+
 ## Desktop app (Tauri 2)
 
 Needs Rust (https://rustup.rs) plus the platform prerequisites from https://tauri.app/start/prerequisites/.
@@ -139,7 +148,8 @@ so the Windows app connects to your server for online play.
 - `src/game.ts`: match simulation, physics, AI, rendering
 - `src/terrain.ts`: bitmap terrain and themes
 - `src/data.ts`: weapons, tank models and cosmetics
-- `src/draw.ts`: tank drawing (`src/assets/tank3d.*`, made by `tools/tank-art` from `art/tank`)
+- `src/draw.ts`: 2D tank drawing (`src/assets/tank3d.*`, made by `tools/tank-art` from `art/tank`)
+- `src/render3d.ts`, `src/terrain3d.ts`: the 3D look (three.js)
 - `shared/catalog.json`: prices, VIP items, maps and ranks (read by the game and the server)
 - `src/main.ts`: menus, setup, shop, input
 - `src/online.ts`: online lobby and connection
