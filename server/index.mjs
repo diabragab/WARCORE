@@ -8,7 +8,7 @@ import { WebSocketServer } from 'ws';
 
 const PORT = Number(process.env.PORT) || 8787;
 const DIST = fileURLToPath(new URL('../dist/', import.meta.url));
-const THEMES = ['grass', 'desert', 'snow'];
+const THEMES = ['warzone', 'grass', 'desert', 'snow'];
 const TYPES = { '.html': 'text/html', '.js': 'text/javascript', '.css': 'text/css', '.woff2': 'font/woff2', '.woff': 'font/woff', '.png': 'image/png', '.svg': 'image/svg+xml' };
 
 const http = createServer(async (req, res) => {
@@ -39,6 +39,23 @@ function newCode() {
 
 const send = (ws, msg) => ws.readyState === 1 && ws.send(JSON.stringify(msg));
 
+/** Players waiting for a quick match, oldest first. */
+const queue = [];
+
+function startMatch(room) {
+  room.started = true;
+  room.rematch = 0;
+  const seed = Math.floor(Math.random() * 2 ** 31);
+  const theme = THEMES[Math.floor(Math.random() * THEMES.length)];
+  const first = Math.random() < 0.5 ? 0 : 1;
+  const players = room.players.map((p, i) => ({ ...p.info, team: i }));
+  room.players.forEach((p, i) => send(p.ws, { t: 'start', seed, theme, first, players, you: i }));
+}
+
+const broadcastQueue = () => {
+  for (const q of queue) send(q.ws, { t: 'queued', online: wss.clients.size });
+};
+
 function cleanInfo(info) {
   const s = (v, n) => String(v ?? '').slice(0, n);
   return {
@@ -63,7 +80,19 @@ wss.on('connection', (ws) => {
     } catch {
       return;
     }
-    if (msg.t === 'create' && !room) {
+    if (msg.t === 'quick' && !room) {
+      if (queue.some((q) => q.ws === ws)) return;
+      const other = queue.shift();
+      if (other && other.ws.readyState === 1) {
+        room = { code: newCode(), players: [other, { ws, info: cleanInfo(msg.info) }], started: false };
+        rooms.set(room.code, room);
+        other.setRoom(room);
+        startMatch(room);
+      } else {
+        queue.push({ ws, info: cleanInfo(msg.info), setRoom: (r) => (room = r) });
+      }
+      broadcastQueue();
+    } else if (msg.t === 'create' && !room) {
       const code = newCode();
       room = { code, players: [{ ws, info: cleanInfo(msg.info) }], started: false };
       rooms.set(code, room);
@@ -73,30 +102,24 @@ wss.on('connection', (ws) => {
       if (!r || r.players.length >= 2) return send(ws, { t: 'error', message: r ? 'That room is already full.' : 'No room with that code. Check it and try again.' });
       room = r;
       r.players.push({ ws, info: cleanInfo(msg.info) });
-      r.started = true;
-      const seed = Math.floor(Math.random() * 2 ** 31);
-      const theme = THEMES[Math.floor(Math.random() * THEMES.length)];
-      const first = Math.random() < 0.5 ? 0 : 1;
-      const players = r.players.map((p, i) => ({ ...p.info, team: i }));
-      r.players.forEach((p, i) => send(p.ws, { t: 'start', seed, theme, first, players, you: i }));
+      startMatch(r);
     } else if (msg.t === 'relay' && room) {
       for (const p of room.players) if (p.ws !== ws) send(p.ws, { t: 'relay', data: msg.data });
     } else if (msg.t === 'rematch' && room && room.players.length === 2) {
       room.rematch = (room.rematch || 0) + 1;
-      if (room.rematch === 2) {
-        room.rematch = 0;
-        const seed = Math.floor(Math.random() * 2 ** 31);
-        const theme = THEMES[Math.floor(Math.random() * THEMES.length)];
-        const first = Math.random() < 0.5 ? 0 : 1;
-        const players = room.players.map((p, i) => ({ ...p.info, team: i }));
-        room.players.forEach((p, i) => send(p.ws, { t: 'start', seed, theme, first, players, you: i }));
-      } else {
+      if (room.rematch === 2) startMatch(room);
+      else {
         for (const p of room.players) if (p.ws !== ws) send(p.ws, { t: 'rematch-offer' });
       }
     }
   });
 
   ws.on('close', () => {
+    const qi = queue.findIndex((q) => q.ws === ws);
+    if (qi >= 0) {
+      queue.splice(qi, 1);
+      broadcastQueue();
+    }
     if (!room) return;
     for (const p of room.players) if (p.ws !== ws) send(p.ws, { t: 'left' });
     rooms.delete(room.code);

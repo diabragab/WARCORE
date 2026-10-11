@@ -96,26 +96,37 @@
  <section id="online" class="screen" hidden>
     <div class="panel setup-panel">
       <p class="eyebrow">Online match</p>
-      <h2>Play a friend online</h2>
+      <h2>Find an opponent</h2>
       <div class="field">
         <label class="label" for="on-name">Your name</label>
         <input id="on-name" class="input" maxlength="16" autocomplete="nickname">
       </div>
-      <div id="on-pick" class="col">
-        <button class="btn primary" id="on-create">Create a room</button>
-        <div class="field">
-          <label class="label" for="on-code">Or join with a code</label>
+      <div id="on-search" class="search" hidden>
+        <div class="radar" aria-hidden="true"><span></span></div>
+        <div class="search-text">
+          <strong>Searching for an opponent…</strong>
+          <span class="muted" id="on-count"></span>
+        </div>
+        <button class="btn ghost" id="on-cancel">Cancel</button>
+      </div>
+      <div id="on-idle" class="col">
+        <button class="btn primary big" id="on-quick">Find a match</button>
+      </div>
+      <details class="friends" id="on-friends">
+        <summary>Play a friend with a room code</summary>
+        <div id="on-pick" class="col">
+          <button class="btn" id="on-create">Create a room</button>
           <div class="join">
-            <input id="on-code" class="input code-input" maxlength="4" placeholder="ABCD" autocomplete="off" spellcheck="false">
+            <input id="on-code" class="input code-input" maxlength="4" placeholder="ABCD" autocomplete="off" spellcheck="false" aria-label="Room code">
             <button class="btn" id="on-join">Join</button>
           </div>
         </div>
-      </div>
-      <div id="on-wait" class="field" hidden>
-        <span class="label">Room code</span>
-        <p class="room-code" id="on-room"></p>
-        <p class="hint">Send this code to your friend. The match starts as soon as they join.</p>
-      </div>
+        <div id="on-wait" class="field" hidden>
+          <span class="label">Room code</span>
+          <p class="room-code" id="on-room"></p>
+          <p class="hint">Send this code to your friend. The match starts as soon as they join.</p>
+        </div>
+      </details>
       <p class="hint status" id="on-status" role="status"></p>
       <details class="server">
         <summary>Server address</summary>

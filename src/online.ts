@@ -56,6 +56,12 @@ export class Online {
   private inGame = false;
 
   constructor(private hooks: Hooks) {
+    $('#on-quick').onclick = () => this.quick();
+    $('#on-cancel').onclick = () => {
+      this.leave();
+      this.view('idle');
+      this.status('');
+    };
     $('#on-create').onclick = () => this.connect({ t: 'create' });
     $('#on-join').onclick = () => this.join();
     $<HTMLInputElement>('#on-code').onkeydown = (e) => e.key === 'Enter' && this.join();
@@ -70,17 +76,33 @@ export class Online {
     return $<HTMLInputElement>('#on-name').value.trim() || 'Commander';
   }
 
+  /** Opening Online goes straight into matchmaking. */
   open() {
     this.leave();
-    $<HTMLInputElement>('#on-name').value = store(NAME_KEY) ?? '';
+    let name = store(NAME_KEY);
+    if (!name) {
+      name = `Tanker${Math.floor(1000 + Math.random() * 9000)}`;
+      store(NAME_KEY, name);
+    }
+    $<HTMLInputElement>('#on-name').value = name;
     $<HTMLInputElement>('#on-server').value = store(SERVER_KEY) ?? defaultServer();
     $('#on-pick').hidden = false;
     $('#on-wait').hidden = true;
-    this.status(
-      inPreview()
-        ? "This shared preview can't open network connections, so online matches work in the desktop app or on the hosted game site."
-        : '',
-    );
+    if (inPreview()) {
+      this.view('idle');
+      this.status("This shared preview can't open network connections, so online matches work in the Windows app or on warcore.claudiumstudios.online.", true);
+    } else this.quick();
+  }
+
+  private view(v: 'idle' | 'search') {
+    $('#on-idle').hidden = v !== 'idle';
+    $('#on-search').hidden = v !== 'search';
+  }
+
+  private quick() {
+    this.view('search');
+    $('#on-count').textContent = 'Connecting to the server…';
+    this.connect({ t: 'quick' });
   }
 
   private status(text: string, error = false) {
@@ -95,12 +117,13 @@ export class Online {
     this.connect({ t: 'join', code });
   }
 
-  private connect(first: { t: 'create' } | { t: 'join'; code: string }) {
+  private connect(first: { t: 'quick' } | { t: 'create' } | { t: 'join'; code: string }) {
+    if (first.t !== 'quick') this.view('idle');
     this.leave();
     store(NAME_KEY, this.name);
     const url = $<HTMLInputElement>('#on-server').value.trim();
     if (url !== defaultServer()) store(SERVER_KEY, url);
-    this.status('Connecting…');
+    this.status(first.t === 'quick' ? '' : 'Connecting…');
     let ws: WebSocket;
     try {
       ws = new WebSocket(url);
@@ -111,13 +134,14 @@ export class Online {
     let opened = false;
     ws.onopen = () => {
       opened = true;
-      this.status(first.t === 'create' ? 'Creating a room…' : 'Joining…');
+      if (first.t !== 'quick') this.status(first.t === 'create' ? 'Creating a room…' : 'Joining…');
       ws.send(JSON.stringify({ ...first, info: this.hooks.info() }));
     };
     ws.onmessage = (ev) => this.receive(JSON.parse(ev.data));
     ws.onclose = () => {
       if (this.ws !== ws) return;
       this.ws = null;
+      this.view('idle');
       if (!opened) this.status(`Couldn't reach the match server at ${url}. Check the address under "Server address".`, true);
       else if (this.inGame) this.hooks.lost();
       else this.status('Disconnected from the match server.', true);
@@ -127,6 +151,11 @@ export class Online {
 
   private receive(m: { t: string; [k: string]: unknown }) {
     switch (m.t) {
+      case 'queued': {
+        const n = Number(m.online) || 1;
+        $('#on-count').textContent = n > 1 ? `${n} players online. You'll be matched with the next player who searches.` : "You're the only one searching right now. The match starts as soon as someone else joins.";
+        break;
+      }
       case 'created':
         $('#on-pick').hidden = true;
         $('#on-wait').hidden = false;

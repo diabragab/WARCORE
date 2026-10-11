@@ -179,6 +179,15 @@ h2 { margin: 0; font-family: var(--display); font-weight: 700; font-size: 32px; 
 .room-code { margin: 0; font-family: var(--display); font-weight: 700; font-size: 64px; letter-spacing: 0.18em; color: var(--signal); -webkit-user-select: all; user-select: all; }
 .status:empty { display: none; }
 .status.error { color: #ff9d8a; }
+.search { display: flex; align-items: center; gap: 16px; padding: 16px; border: 1px solid var(--line); border-radius: var(--radius); background: rgba(215, 38, 30, 0.08); flex-wrap: wrap; }
+.search-text { display: flex; flex-direction: column; gap: 4px; flex: 1; min-width: 0; }
+.search-text strong { font-size: 17px; letter-spacing: 0.04em; }
+.radar { width: 44px; height: 44px; border-radius: 50%; border: 2px solid rgba(239, 59, 44, 0.6); position: relative; overflow: hidden; flex: none; background: radial-gradient(circle, rgba(239, 59, 44, 0.25) 0 2px, transparent 3px); }
+.radar span { position: absolute; inset: 0; background: conic-gradient(from 0deg, rgba(239, 59, 44, 0.65), transparent 25%); animation: sweep 1.4s linear infinite; }
+@keyframes sweep { to { transform: rotate(360deg); } }
+@media (prefers-reduced-motion: reduce) { .radar span { animation-duration: 6s; } }
+.friends summary { cursor: pointer; color: var(--muted); font-size: 14px; padding: 4px 0; }
+.friends[open] summary { margin-bottom: 12px; }
 .server summary { cursor: pointer; color: var(--muted); font-size: 13px; margin-bottom: 8px; }
 .server .input { font-size: 14px; }
 
