@@ -1,0 +1,98 @@
+{
+  "prices": {
+    "tank": {
+      "patton": 0,
+      "jackal": 300,
+      "longbow": 450,
+      "bastion": 600,
+      "howitzer": 900,
+      "titan": 1200
+    },
+    "weapon": {
+      "shell": 0,
+      "heavy": 150,
+      "dirt": 120,
+      "bouncer": 200,
+      "triple": 250,
+      "teleport": 300,
+      "cluster": 350,
+      "airstrike": 450,
+      "homing": 500,
+      "nuke": 800
+    },
+    "paint": {
+      "olive": 0,
+      "sand": 0,
+      "crimson": 150,
+      "navy": 150,
+      "arctic": 120,
+      "violet": 300,
+      "gold": 700,
+      "obsidian": 0
+    },
+    "decal": {
+      "none": 0,
+      "star": 80,
+      "stripes": 120,
+      "chevron": 100,
+      "flames": 220,
+      "skull": 260,
+      "crown": 0
+    },
+    "trail": {
+      "smoke": 0,
+      "fire": 100,
+      "plasma": 180,
+      "sparkle": 220,
+      "rainbow": 400
+    }
+  },
+  "vipOnly": [
+    "paint:obsidian",
+    "decal:crown"
+  ],
+  "starter": [
+    "tank:patton",
+    "weapon:shell",
+    "paint:olive",
+    "paint:sand",
+    "decal:none",
+    "trail:smoke"
+  ],
+  "maps": [
+    "warzone",
+    "grass",
+    "desert",
+    "snow",
+    "night",
+    "volcano",
+    "city"
+  ],
+  "ranks": [
+    {
+      "name": "Bronze",
+      "min": 0
+    },
+    {
+      "name": "Silver",
+      "min": 1100
+    },
+    {
+      "name": "Gold",
+      "min": 1250
+    },
+    {
+      "name": "Platinum",
+      "min": 1400
+    },
+    {
+      "name": "Diamond",
+      "min": 1600
+    }
+  ],
+  "vip": {
+    "price": 4.99,
+    "days": 30,
+    "multiplier": 2
+  }
+}

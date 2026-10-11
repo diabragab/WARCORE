@@ -1,5 +1,3 @@
-import { pushProfile } from './account';
-
 const KEY = 'tanks.profile.v1';
 
 export interface Profile {
@@ -7,9 +5,17 @@ export interface Profile {
   /** Owned items as "kind:id", e.g. "tank:patton", "weapon:heavy". */
   owned: string[];
   equipped: { tank: string; paint: string; decal: string; trail: string };
-  stats: { played: number; wins: number; arcadeBest: number };
-  /** Bought coins already counted in this copy (the server adds any newer purchases when it saves). */
-  paidSeen?: number;
+  stats: { played: number; wins: number; arcadeBest: number; onlineWins?: number; onlinePlayed?: number; kills?: number };
+  // Filled in by the server for signed-in players:
+  rating?: number;
+  rank?: string;
+  vip?: boolean;
+  vipUntil?: number;
+  /** Coins bought so far; a change means a purchase came through. */
+  paidTotal?: number;
+  daily?: { available: boolean; streak: number; coins: number };
+  missions?: { text: string; goal: number; reward: number; progress: number; done: boolean }[];
+  admin?: boolean;
 }
 
 const fresh = (): Profile => ({
@@ -36,8 +42,8 @@ export function loadProfile(): Profile {
   return fresh();
 }
 
-export function saveProfile(p: Profile, sync = true) {
-  if (sync) pushProfile(p);
+/** Keeps a copy in this browser (the account's copy on the server is the one that counts). */
+export function saveProfile(p: Profile) {
   try {
     localStorage.setItem(KEY, JSON.stringify(p));
   } catch {

@@ -230,3 +230,39 @@ h2 { margin: 0; font-family: var(--display); font-weight: 700; font-size: 32px; 
 .pack .amount { font-size: 22px; font-weight: 700; color: #ffd36b; }
 .pack .note { font-size: 12px; color: var(--signal-hi); text-transform: uppercase; letter-spacing: 0.08em; min-height: 1em; }
 .pack .price { font-weight: 600; font-size: 17px; }
+
+/* Daily reward, missions, ranks, VIP, leaderboard */
+.side-card { background: var(--panel); border: 1px solid var(--line); border-radius: var(--radius); padding: 18px 20px; display: flex; flex-direction: column; gap: 16px; max-width: 460px; backdrop-filter: blur(6px); }
+.daily { display: flex; align-items: center; justify-content: space-between; gap: 12px; }
+.daily-text { margin: 4px 0 0; font-size: 15px; }
+.missions ul { list-style: none; margin: 8px 0 0; padding: 0; display: flex; flex-direction: column; gap: 10px; }
+.missions li { display: grid; grid-template-columns: 1fr auto; gap: 4px 12px; font-size: 14px; }
+.missions li .reward { color: #ffd166; font-weight: 700; font-variant-numeric: tabular-nums; }
+.missions li .bar { grid-column: 1 / -1; height: 6px; background: rgba(255, 255, 255, 0.1); border-radius: 3px; overflow: hidden; }
+.missions li .bar span { display: block; height: 100%; background: linear-gradient(90deg, var(--signal), #ffb067); }
+.missions li.done { color: var(--muted); }
+.missions li.done .bar span { background: var(--olive); }
+.badges { margin: 0; display: flex; gap: 8px; flex-wrap: wrap; justify-content: center; }
+.badges:empty { display: none; }
+.badge { font-size: 12px; font-weight: 700; letter-spacing: 0.12em; text-transform: uppercase; padding: 4px 8px; border-radius: 3px; border: 1px solid currentColor; }
+.badge.bronze { color: #d08a52; }
+.badge.silver { color: #c9d1d9; }
+.badge.gold { color: #f2c84b; }
+.badge.platinum { color: #7fe0d6; }
+.badge.diamond { color: #9ec9ff; }
+.badge.vip { color: #1a1205; background: linear-gradient(180deg, #ffe08a, #e0a526); border-color: #e0a526; }
+.vip-btn { color: #ffd36b; border-color: rgba(255, 211, 107, 0.5); }
+.vip-offer { display: flex; gap: 16px; align-items: center; justify-content: space-between; flex-wrap: wrap; padding: 16px; border: 1px solid rgba(255, 211, 107, 0.45); border-radius: var(--radius); background: linear-gradient(135deg, rgba(255, 200, 80, 0.12), rgba(255, 200, 80, 0.02)); }
+.vip-title { margin: 4px 0 8px; font-size: 20px; font-weight: 700; color: #ffd36b; }
+.vip-perks { margin: 0; padding-left: 18px; font-size: 14px; line-height: 1.6; color: var(--text); }
+.result-notes { margin: -8px 0 0; padding: 0; list-style: none; font-size: 14px; color: var(--text); display: flex; flex-direction: column; gap: 4px; }
+.result-notes:empty { display: none; }
+.leader-table td:first-child { width: 2.5em; color: var(--muted); }
+.leader-table .me td { color: #ffd166; }
+.panel.wide { width: min(100%, 980px); }
+.table-scroll { overflow-x: auto; max-height: 60vh; }
+.table-scroll .scores td, .table-scroll .scores th { white-space: nowrap; padding-inline: 10px; text-align: left; }
+.card .vip-tag { font-size: 11px; font-weight: 700; letter-spacing: 0.12em; color: #ffd36b; text-transform: uppercase; }
+@media (max-width: 640px) {
+  .side-card { max-width: none; }
+}

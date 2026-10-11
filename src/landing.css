@@ -74,3 +74,19 @@ section.modes, section.gallery { padding: 88px clamp(16px, 6vw, 96px) 0; }
   .banner { aspect-ratio: 4 / 3; object-position: center 45%; }
   .hero-bar { margin-top: 0; padding-top: 20px; }
 }
+
+section.leaders { padding: 88px clamp(16px, 6vw, 96px) 0; }
+.board-grid { display: grid; grid-template-columns: repeat(3, 1fr); gap: 20px; }
+.board { background: var(--panel); border: 1px solid var(--line); border-radius: 10px; padding: 20px 22px; }
+.board h3 { font-size: 17px; margin-bottom: 12px; }
+.board ol { margin: 0; padding: 0; list-style: none; counter-reset: pos; display: flex; flex-direction: column; gap: 8px; }
+.board li { counter-increment: pos; display: flex; align-items: center; gap: 10px; font-size: 15px; }
+.board li::before { content: counter(pos); width: 1.6em; color: var(--muted); font-variant-numeric: tabular-nums; }
+.board li .name { flex: 1; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; font-weight: 600; }
+.board li .value { font-variant-numeric: tabular-nums; color: #ffd166; font-weight: 700; }
+.board li.empty { color: var(--muted); }
+.board li.empty::before { content: none; }
+.tag { font-size: 11px; font-weight: 700; letter-spacing: 0.1em; text-transform: uppercase; padding: 2px 6px; border-radius: 3px; border: 1px solid currentColor; }
+.tag.bronze { color: #d08a52; } .tag.silver { color: #c9d1d9; } .tag.gold { color: #f2c84b; } .tag.platinum { color: #7fe0d6; } .tag.diamond { color: #9ec9ff; }
+.tag.vip { color: #1a1205; background: #f2c84b; border-color: #f2c84b; }
+@media (max-width: 860px) { .board-grid { grid-template-columns: 1fr; } }

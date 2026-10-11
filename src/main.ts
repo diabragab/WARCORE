@@ -5,8 +5,8 @@ import '@fontsource/chakra-petch/700.css';
 import './style.css';
 
 import { Game, type Difficulty, type MatchResult, type PlayerSetup } from './game';
-import { Online } from './online';
-import { DECALS, MODELS, PAINTS, TRAILS, WEAPONS, modelById, paintById, type Cosmetic, type Look } from './data';
+import { Online, type OnlineReward } from './online';
+import { DECALS, MODELS, PAINTS, TRAILS, WEAPONS, modelById, paintById, rankFor, type Cosmetic, type Look } from './data';
 import { drawTank, trailColor } from './draw';
 import { THEMES } from './terrain';
 import { loadProfile, normalize, owns, saveProfile, type Profile } from './profile';
@@ -46,7 +46,7 @@ const seed = () => Math.floor(Math.random() * 2 ** 31);
 function startDemo() {
   inMatch = false;
   const looks = [0, 1].map(() => ({ paint: rand(PAINTS).value, decal: rand(DECALS).id, trail: rand(TRAILS).id }));
-  const all = WEAPONS.filter((w) => w.kind !== 'dirt').map((w) => w.id);
+  const all = WEAPONS.filter((w) => w.kind !== 'dirt' && w.kind !== 'teleport').map((w) => w.id);
   game = new Game({
     players: [
       { name: 'Alpha', team: 0, color: '#ff8a3d', ai: 'hard', model: rand(MODELS).id, look: looks[0], weapons: all },
@@ -61,7 +61,7 @@ function startDemo() {
 
 // ------------------------------------------------------------------ screens
 
-const screens = ['menu', 'setup', 'shop', 'online', 'settings', 'account', 'buy', 'pause', 'result'] as const;
+const screens = ['menu', 'setup', 'shop', 'online', 'settings', 'account', 'buy', 'leaders', 'purchases', 'pause', 'result'] as const;
 type Screen = (typeof screens)[number] | 'none';
 /** Players need an account to play (except in the offline preview page, which can't reach the server). */
 const mustSignIn = () => account.accountsAvailable() && !account.session;
@@ -88,9 +88,201 @@ function renderMenu() {
   $('#btn-account').textContent = s ? 'Account' : 'Sign in to save your progress';
   $('#btn-account').hidden = !account.accountsAvailable();
   $('#menu-coins').textContent = `${profile.coins} coins`;
+  $('#menu-rank').replaceChildren(...badges(profile.rating, profile.vip));
+  renderMissions();
   $('#menu-stats').textContent = profile.stats.played ? `${profile.stats.wins} ${profile.stats.wins === 1 ? 'win' : 'wins'} from ${profile.stats.played} ${profile.stats.played === 1 ? 'match' : 'matches'}` : 'No matches played yet';
   if (profile.stats.arcadeBest) $('#menu-stats').textContent += ` · Arcade best: wave ${profile.stats.arcadeBest}`;
 }
+
+/** Rank and VIP badges for a player (nothing for a player without a rating, e.g. in the offline preview). */
+function badges(rating?: number, vip?: boolean): HTMLElement[] {
+  const out: HTMLElement[] = [];
+  if (rating !== undefined) {
+    const rank = rankFor(rating);
+    const b = document.createElement('span');
+    b.className = `badge ${rank.toLowerCase()}`;
+    b.textContent = `${rank} · ${rating}`;
+    b.title = 'Ranked online rating';
+    out.push(b);
+  }
+  if (vip) {
+    const v = document.createElement('span');
+    v.className = 'badge vip';
+    v.textContent = 'VIP';
+    out.push(v);
+  }
+  return out;
+}
+
+// ------------------------------------------------------------------ daily reward and missions
+
+function renderMissions() {
+  const side = $('#menu-side');
+  side.hidden = !account.session || !profile.missions;
+  if (side.hidden) return;
+  const d = profile.daily;
+  $('#daily').hidden = !d;
+  if (d) {
+    $('#daily-text').textContent = d.available
+      ? `Day ${d.streak} streak: collect ${d.coins} coins`
+      : `Collected. Come back tomorrow for day ${d.streak + 1}.`;
+    $<HTMLButtonElement>('#btn-daily').hidden = !d.available;
+  }
+  $('#missions').replaceChildren(
+    ...(profile.missions ?? []).map((m) => {
+      const li = document.createElement('li');
+      li.className = m.done ? 'done' : '';
+      const text = document.createElement('span');
+      text.textContent = `${m.done ? '✓ ' : ''}${m.text}${m.goal > 1 ? `  (${m.progress}/${m.goal})` : ''}`;
+      const reward = document.createElement('span');
+      reward.className = 'reward';
+      reward.textContent = m.done ? 'Done' : `+${m.reward}`;
+      const bar = document.createElement('span');
+      bar.className = 'bar';
+      const fill = document.createElement('span');
+      fill.style.width = `${Math.round((100 * m.progress) / m.goal)}%`;
+      bar.append(fill);
+      li.append(text, reward, bar);
+      return li;
+    }),
+  );
+}
+
+$('#btn-daily').onclick = async () => {
+  const b = $<HTMLButtonElement>('#btn-daily');
+  b.disabled = true;
+  try {
+    const r = await account.claimDaily();
+    useProfile(r.profile);
+    sfx.coin();
+    $('#daily-text').textContent = `+${r.coins} coins! Come back tomorrow for day ${r.streak + 1}.`;
+    $('#menu-coins').textContent = `${profile.coins} coins`;
+    b.hidden = true;
+  } catch (e) {
+    $('#daily-text').textContent = (e as Error).message;
+  } finally {
+    b.disabled = false;
+  }
+};
+
+// ------------------------------------------------------------------ leaderboard
+
+type Board = 'rating' | 'wins' | 'arcade';
+let board: Board = 'rating';
+let boards: Awaited<ReturnType<typeof account.leaderboard>> | null = null;
+
+function renderLeaders() {
+  const tabs: { id: Board; label: string; head: string }[] = [
+    { id: 'rating', label: 'Rank', head: 'Rating' },
+    { id: 'wins', label: 'Online wins', head: 'Wins' },
+    { id: 'arcade', label: 'Arcade', head: 'Best wave' },
+  ];
+  $('#leader-tabs').replaceChildren(
+    ...tabs.map((t) => {
+      const b = document.createElement('button');
+      b.className = 'tab';
+      b.setAttribute('role', 'tab');
+      b.setAttribute('aria-selected', String(t.id === board));
+      b.textContent = t.label;
+      b.onclick = () => {
+        board = t.id;
+        sfx.click();
+        renderLeaders();
+      };
+      return b;
+    }),
+  );
+  const table = $('#leader-table');
+  table.replaceChildren();
+  if (!boards) return;
+  const rows = boards[board];
+  $('#leader-status').textContent = rows.length ? '' : 'Nobody is on this board yet. Play a match to be the first!';
+  const head = document.createElement('tr');
+  for (const h of ['#', 'Commander', tabs.find((t) => t.id === board)!.head]) {
+    const th = document.createElement('th');
+    th.textContent = h;
+    head.append(th);
+  }
+  const thead = document.createElement('thead');
+  thead.append(head);
+  const tbody = document.createElement('tbody');
+  rows.forEach((r, i) => {
+    const tr = document.createElement('tr');
+    if (r.name === account.session?.name) tr.className = 'me';
+    const pos = document.createElement('td');
+    pos.textContent = String(i + 1);
+    const name = document.createElement('td');
+    name.append(r.name, ' ', ...badges(undefined, r.vip));
+    const rank = document.createElement('span');
+    rank.className = `badge ${r.rank.toLowerCase()}`;
+    rank.textContent = r.rank;
+    name.append(' ', rank);
+    const val = document.createElement('td');
+    val.textContent = String(r.value);
+    tr.append(pos, name, val);
+    tbody.append(tr);
+  });
+  table.append(thead, tbody);
+}
+
+async function openLeaders() {
+  boards = null;
+  $('#leader-status').textContent = 'Loading…';
+  renderLeaders();
+  show('leaders');
+  try {
+    boards = await account.leaderboard();
+    renderLeaders();
+  } catch (e) {
+    $('#leader-status').textContent = (e as Error).message;
+  }
+}
+$('#btn-leaders').onclick = openLeaders;
+$('#btn-leaders').hidden = !account.accountsAvailable();
+
+// ------------------------------------------------------------------ purchase log (game owner only)
+
+async function openPurchases() {
+  show('purchases');
+  $('#purchase-summary').textContent = 'Loading…';
+  $('#purchase-table').replaceChildren();
+  try {
+    const list = await account.purchases();
+    const money = (n: number, c: string) => new Intl.NumberFormat('en-US', { style: 'currency', currency: c || 'USD' }).format(n);
+    const paid = list.filter((p) => p.type === 'payment').reduce((a, p) => a + p.amount, 0);
+    const refunded = list.filter((p) => p.type === 'refund').reduce((a, p) => a + p.amount, 0);
+    $('#purchase-summary').textContent = list.length
+      ? `${list.filter((p) => p.type === 'payment').length} payments (${money(paid, 'USD')}), ${list.filter((p) => p.type === 'refund').length} refunds (${money(refunded, 'USD')}). Newest first.`
+      : 'No payments yet.';
+    const head = document.createElement('tr');
+    for (const h of ['When', 'Type', 'Player', 'Item', 'Amount', 'Coins', 'Whop payment']) {
+      const th = document.createElement('th');
+      th.textContent = h;
+      head.append(th);
+    }
+    const thead = document.createElement('thead');
+    thead.append(head);
+    const tbody = document.createElement('tbody');
+    for (const p of list) {
+      const tr = document.createElement('tr');
+      const item = p.item === 'vip' ? `VIP${p.reason === 'subscription_cycle' ? ' (renewal)' : ''}` : p.item;
+      for (const v of [new Date(p.time).toLocaleString(), p.type === 'refund' ? 'Refund' : 'Payment', p.player, item, money(p.amount, p.currency), p.coins ? String(p.coins) : '', p.payment]) {
+        const td = document.createElement('td');
+        td.textContent = v;
+        tr.append(td);
+      }
+      tbody.append(tr);
+    }
+    $('#purchase-table').append(thead, tbody);
+  } catch (e) {
+    $('#purchase-summary').textContent = (e as Error).message;
+  }
+}
+$('#acc-purchases').onclick = openPurchases;
+$('#purchases-back').onclick = () => {
+  renderAccount();
+  show('account');
+};
 
 // ------------------------------------------------------------------ settings
 
@@ -166,7 +358,30 @@ function renderAccount(status = '') {
   $('#acc-title').textContent = s ? s.name : accMode === 'login' ? 'Sign in' : 'Create an account';
   $('#acc-eyebrow').textContent = s ? 'Player account' : 'Sign in to play WARCORE';
   $('#acc-back').hidden = mustSignIn();
-  if (s) $('#acc-signed-text').textContent = 'Your coins, tanks, weapons and paint jobs are saved to this account. Sign in with the same name on any computer or browser to get them back.';
+  if (s) {
+    $('#acc-signed-text').textContent = 'Your coins, tanks, weapons and paint jobs are saved to this account. Sign in with the same name on any computer or browser to get them back.';
+    const st = profile.stats;
+    const rows: [string, string][] = [
+      ['Rank', profile.rating !== undefined ? `${rankFor(profile.rating)} (${profile.rating})` : '-'],
+      ['Online wins', `${st.onlineWins ?? 0} of ${st.onlinePlayed ?? 0}`],
+      ['All wins', `${st.wins} of ${st.played}`],
+      ['Tanks destroyed', String(st.kills ?? 0)],
+      ['Best arcade wave', String(st.arcadeBest)],
+      ['VIP', profile.vip && profile.vipUntil ? `Active until ${new Date(profile.vipUntil).toLocaleDateString()}` : 'No'],
+    ];
+    const tb = document.createElement('tbody');
+    for (const [a, b] of rows) {
+      const tr = document.createElement('tr');
+      for (const v of [a, b]) {
+        const td = document.createElement('td');
+        td.textContent = v;
+        tr.append(td);
+      }
+      tb.append(tr);
+    }
+    $('#acc-stats').replaceChildren(tb);
+    $('#acc-purchases').hidden = !profile.admin;
+  }
   $('#acc-tab-login').setAttribute('aria-selected', String(accMode === 'login'));
   $('#acc-tab-register').setAttribute('aria-selected', String(accMode === 'register'));
   $('#acc-submit').textContent = accMode === 'login' ? 'Sign in' : 'Create account';
@@ -179,20 +394,11 @@ function renderAccount(status = '') {
   $('#acc-status').classList.toggle('error', false);
 }
 
+/** Takes the account's profile from the server, which decides coins and purchases. */
 function useProfile(p: Profile) {
   profile = normalize(p);
-  saveProfile(profile, false);
+  saveProfile(profile);
 }
-
-// A save can come back with coins bought on the website or in another window.
-account.setOnServerProfile((p) => {
-  if ((p.paidSeen ?? 0) === (profile.paidSeen ?? 0)) return;
-  profile.coins = p.coins;
-  profile.paidSeen = p.paidSeen;
-  saveProfile(profile, false);
-  if (!$('#shop').hidden) renderShop();
-  if (!$('#menu').hidden) renderMenu();
-});
 
 $('#btn-account').onclick = () => {
   renderAccount();
@@ -208,7 +414,7 @@ $('#acc-fields').onsubmit = async (e) => {
   btn.disabled = true;
   $('#acc-status').textContent = accMode === 'login' ? 'Signing in…' : 'Creating your account…';
   try {
-    useProfile(accMode === 'login' ? await account.login(name, pass) : await account.register(name, pass, profile));
+    useProfile(accMode === 'login' ? await account.login(name, pass) : await account.register(name, pass));
     $<HTMLInputElement>('#acc-pass').value = '';
     sfx.coin();
     show('menu');
@@ -319,7 +525,32 @@ function myLook(): Look {
   return { paint: paintById(e.paint).value, decal: e.decal, trail: e.trail };
 }
 
+/** The server's id for the match being played, which the reward is collected with (signed-in players only). */
+let ticket: Promise<string | null> = Promise.resolve(null);
+const openTicket = (mode: 'ai' | 'local' | 'arcade', diff?: string) => {
+  ticket = account.session ? account.matchStart(mode, diff).catch(() => null) : Promise.resolve(null);
+};
+
+/** Result-screen lines for missions finished in a match. */
+function noteMissions(list: { text: string; coins: number }[], extra: string[] = []) {
+  $('#result-notes').replaceChildren(
+    ...[...extra, ...list.map((m) => `Mission complete: ${m.text}  +${m.coins}`)].map((t) => {
+      const li = document.createElement('li');
+      li.textContent = t;
+      return li;
+    }),
+  );
+}
+
+/** Kills per weapon id for one side of a match. */
+const killsOf = (r: MatchResult, team: number) => {
+  const out: Record<string, number> = {};
+  for (const p of r.players) if (p.team === team) for (const [k, v] of Object.entries(p.weaponKills)) out[k] = (out[k] ?? 0) + v;
+  return out;
+};
+
 function startMatch() {
+  if (setup.mode === 'ai' || setup.mode === 'local') openTicket(setup.mode, setup.diff);
   const weapons = WEAPONS.filter((w) => owns(profile, 'weapon', w.id)).map((w) => w.id);
   const ai = setup.mode === 'ai';
   const p1: PlayerSetup = { name: ai ? 'You' : 'Player 1', team: 0, color: '#ff8a3d', model: profile.equipped.tank, look: myLook(), weapons };
@@ -364,7 +595,10 @@ function arcadeEnemies(w: number): Difficulty[] {
 
 function startArcade(fresh: boolean) {
   const model = modelById(profile.equipped.tank);
-  if (fresh) Object.assign(arcade, { wave: 1, hp: model.hp, damage: 0, coins: 0, won: false });
+  if (fresh) {
+    Object.assign(arcade, { wave: 1, hp: model.hp, damage: 0, coins: 0, won: false });
+    openTicket('arcade');
+  }
   setup.mode = 'arcade';
   const weapons = WEAPONS.filter((w) => owns(profile, 'weapon', w.id)).map((w) => w.id);
   const me: PlayerSetup = { name: 'You', team: 0, color: '#ff8a3d', model: model.id, look: myLook(), weapons, hp: arcade.hp };
@@ -383,34 +617,63 @@ function finishArcade(r: MatchResult) {
   const me = r.players[0];
   const won = r.winnerTeam === 0;
   const wave = arcade.wave;
-  const coins = Math.round(me.damage / 3) + (won ? 30 + wave * 20 : 0);
   arcade.damage += me.damage;
-  arcade.coins += coins;
   arcade.won = won;
-  profile.coins += coins;
   const cleared = won ? wave : wave - 1;
   const best = cleared > profile.stats.arcadeBest;
-  if (best) profile.stats.arcadeBest = cleared;
-  if (!won) profile.stats.played++;
-  saveProfile(profile);
+  noteMissions([]);
+  if (account.session) {
+    $('#result-coins').textContent = 'Counting your coins…';
+    collect({ won, damage: me.damage, kills: r.players.filter((p) => p.team !== 0 && !p.alive).length, weaponKills: killsOf(r, 0) }, (res) => {
+      arcade.coins += res.coins;
+      if (res.over) arcade.won = false;
+    });
+  } else {
+    const coins = Math.round(me.damage / 3) + (won ? 30 + wave * 20 : 0);
+    arcade.coins += coins;
+    profile.coins += coins;
+    if (best) profile.stats.arcadeBest = cleared;
+    if (!won) profile.stats.played++;
+    saveProfile(profile);
+    $('#result-coins').textContent = `+${coins} coins  ·  ${profile.coins} total`;
+  }
 
   const maxHp = modelById(profile.equipped.tank).hp;
   if (won) {
     arcade.hp = Math.min(maxHp, me.hp + Math.round(maxHp * 0.35));
     arcade.wave++;
   }
+  const record = Math.max(profile.stats.arcadeBest, cleared);
   $('#result-eyebrow').textContent = won ? `Wave ${wave} cleared` : 'Arcade over';
   $('#result-title').textContent = won ? `Wave ${arcade.wave} is next` : `You cleared ${cleared} ${cleared === 1 ? 'wave' : 'waves'}`;
   $<HTMLButtonElement>('#btn-rematch').disabled = false;
   $('#btn-rematch').textContent = won ? 'Next wave' : 'Play again';
   const rows: [string, string][] = won
     ? [['Armor after repairs', `${arcade.hp} / ${maxHp}`], ['Next wave', `${arcadeEnemies(arcade.wave).length} enemy ${arcadeEnemies(arcade.wave).length === 1 ? 'tank' : 'tanks'}`], ['Damage dealt this run', String(arcade.damage)]]
-    : [['Waves cleared', String(cleared)], ['Best run', `${profile.stats.arcadeBest} ${best ? '(new record)' : ''}`.trim()], ['Damage dealt', String(arcade.damage)]];
+    : [['Waves cleared', String(cleared)], ['Best run', `${record} ${best ? '(new record)' : ''}`.trim()], ['Damage dealt', String(arcade.damage)]];
   resultTable(['Arcade', ''], rows);
-  $('#result-coins').textContent = `+${coins} coins  ·  ${profile.coins} total`;
   sfx.coin();
   inMatch = false;
   show('result');
+}
+
+/** Sends a finished match to the server and shows the coins it pays. */
+async function collect(body: { won: boolean; damage: number; kills?: number; weaponKills?: Record<string, number> }, after?: (r: account.MatchReward) => void) {
+  const id = await ticket;
+  if (!id) {
+    $('#result-coins').textContent = "This match couldn't be counted (the server wasn't reachable when it started).";
+    return;
+  }
+  try {
+    const r = await account.matchFinish({ id, ...body });
+    useProfile(r.profile);
+    after?.(r);
+    $('#result-coins').textContent = r.note ?? `+${r.coins} coins  ·  ${profile.coins} total`;
+    noteMissions(r.missions);
+    if (r.missions.length) sfx.coin();
+  } catch (e) {
+    $('#result-coins').textContent = (e as Error).message;
+  }
 }
 
 function resultTable(head: [string, string], rows: [string, string][]) {
@@ -442,18 +705,23 @@ function finishMatch(r: MatchResult, myTeam = 0, note = '') {
   const me = r.players.find((p) => p.team === myTeam)!;
   const other = r.players.find((p) => p.team !== myTeam)!;
   const won = r.winnerTeam === myTeam;
-  let coins: number;
-  if (setup.mode === 'ai') {
-    coins = Math.round(me.damage / 2) + (won ? 60 + { easy: 0, normal: 40, hard: 90 }[setup.diff] : 10);
-  } else if (setup.mode === 'online') {
-    coins = Math.round(me.damage / 2) + (won ? 100 : 15);
+  noteMissions([]);
+  if (setup.mode === 'online') {
+    // The server compares both players' reports and pays out; its answer arrives as a reward message.
+    online.report(r.winnerTeam, [0, 1].map((t) => r.players.find((p) => p.team === t)?.damage ?? 0), [killsOf(r, 0), killsOf(r, 1)]);
+    $('#result-coins').textContent = 'Waiting for the match result…';
+  } else if (account.session) {
+    $('#result-coins').textContent = 'Counting your coins…';
+    collect(setup.mode === 'local' ? { won: false, damage: me.damage + other.damage } : { won, damage: me.damage, weaponKills: killsOf(r, myTeam) });
   } else {
-    coins = 25 + Math.round((me.damage + other.damage) / 4);
+    const coins =
+      setup.mode === 'ai' ? Math.round(me.damage / 2) + (won ? 60 + { easy: 0, normal: 40, hard: 90 }[setup.diff] : 10) : 25 + Math.round((me.damage + other.damage) / 4);
+    profile.coins += coins;
+    profile.stats.played++;
+    if (versus && won) profile.stats.wins++;
+    saveProfile(profile);
+    $('#result-coins').textContent = `+${coins} coins  ·  ${profile.coins} total`;
   }
-  profile.coins += coins;
-  profile.stats.played++;
-  if (versus && won) profile.stats.wins++;
-  saveProfile(profile);
 
   $('#result-eyebrow').textContent = note || (versus ? (won ? 'Mission complete' : 'Mission failed') : 'Match over');
   $('#result-title').textContent =
@@ -461,10 +729,18 @@ function finishMatch(r: MatchResult, myTeam = 0, note = '') {
   $<HTMLButtonElement>('#btn-rematch').disabled = false;
   $('#btn-rematch').textContent = 'Rematch';
   resultTable(['Commander', 'Damage dealt'], [me, other].map((p) => [p.name + (p.team === r.winnerTeam ? '  ★' : ''), String(p.damage)]));
-  $('#result-coins').textContent = `+${coins} coins  ·  ${profile.coins} total`;
   sfx.coin();
   inMatch = false;
   show('result');
+}
+
+/** The server's verdict on an online match: coins, rating change and missions. */
+function onlineReward(r: OnlineReward) {
+  useProfile(r.profile as Profile);
+  $('#result-coins').textContent = `+${r.coins} coins  ·  ${profile.coins} total`;
+  const sign = r.change > 0 ? '+' : '';
+  noteMissions(r.missions, r.ranked ? [`Rating ${r.rating} (${sign}${r.change})  ·  ${r.rank}`] : ['Friendly match: rating unchanged']);
+  if (!$('#menu').hidden) renderMenu();
 }
 
 function pause(on: boolean) {
@@ -492,7 +768,7 @@ const TABS: { id: Tab; label: string }[] = [
 ];
 let tab: Tab = 'tank';
 
-interface ShopItem { id: string; name: string; desc: string; stats?: string; price: number; draw: (c: HTMLCanvasElement) => void }
+interface ShopItem { id: string; name: string; desc: string; stats?: string; price: number; vip?: boolean; draw: (c: HTMLCanvasElement) => void }
 
 function previewTank(c: HTMLCanvasElement, modelId: string, look: Look) {
   const g = c.getContext('2d')!;
@@ -531,7 +807,7 @@ function previewWeapon(c: HTMLCanvasElement, id: string) {
     g.arc(100, 60, r, 0, Math.PI);
     g.fill();
   }
-  const shots = w.kind === 'cluster' ? 5 : w.shots ?? 1;
+  const shots = w.kind === 'cluster' || w.kind === 'airstrike' ? 5 : w.shots ?? 1;
   for (let i = 0; i < shots; i++) {
     const x = 100 + (i - (shots - 1) / 2) * 16;
     g.fillStyle = w.color;
@@ -546,7 +822,7 @@ function previewWeapon(c: HTMLCanvasElement, id: string) {
 function itemsFor(t: Tab): ShopItem[] {
   const look = myLook();
   const cos = (list: Cosmetic[], f: (c: Cosmetic) => Partial<Look>) =>
-    list.map((c) => ({ id: c.id, name: c.name, desc: '', price: c.price, draw: (cv: HTMLCanvasElement) => previewTank(cv, profile.equipped.tank, { ...look, ...f(c) }) }));
+    list.map((c) => ({ id: c.id, name: c.name, desc: c.vip ? 'Included with VIP membership.' : '', price: c.price, vip: c.vip, draw: (cv: HTMLCanvasElement) => previewTank(cv, profile.equipped.tank, { ...look, ...f(c) }) }));
   switch (t) {
     case 'tank':
       return MODELS.map((m) => ({
@@ -557,7 +833,7 @@ function itemsFor(t: Tab): ShopItem[] {
     case 'weapon':
       return WEAPONS.map((w) => ({
         id: w.id, name: w.name, desc: w.desc, price: w.price,
-        stats: `${w.damage ? `Damage ${w.damage}${w.shots ? ` ×${w.shots}` : ''} · ` : ''}Blast ${w.radius} · ${w.ammo < 0 ? 'Unlimited' : `${w.ammo} per match`}`,
+        stats: `${w.damage ? `Damage ${w.damage}${w.shots ? ` ×${w.shots}` : w.kind === 'airstrike' ? ' ×5' : ''} · ` : ''}${w.radius ? `Blast ${w.radius} · ` : ''}${w.ammo < 0 ? 'Unlimited' : `${w.ammo} per match`}`,
         draw: (c) => previewWeapon(c, w.id),
       }));
     case 'paint':
@@ -641,7 +917,12 @@ function renderShop() {
       }
       const btn = document.createElement('button');
       btn.className = 'btn';
-      if (!owned) {
+      if (it.vip && !owned) {
+        btn.textContent = 'Join VIP';
+        btn.classList.add('vip-btn');
+        btn.hidden = !account.session;
+        btn.onclick = () => openBuy();
+      } else if (!owned) {
         btn.textContent = it.price === 0 ? 'Free' : `Buy · ${it.price}`;
         btn.classList.add('primary');
         btn.disabled = profile.coins < it.price;
@@ -665,57 +946,114 @@ function renderShop() {
   );
 }
 
-function buy(it: ShopItem) {
+async function buy(it: ShopItem) {
   if (profile.coins < it.price) return;
-  profile.coins -= it.price;
-  profile.owned.push(`${tab}:${it.id}`);
-  if (tab !== 'weapon') profile.equipped[tab] = it.id;
-  saveProfile(profile);
+  const kind = tab;
+  if (account.session) {
+    try {
+      useProfile(await account.buyItem(`${kind}:${it.id}`));
+    } catch (e) {
+      return shopError((e as Error).message);
+    }
+  } else {
+    profile.coins -= it.price;
+    profile.owned.push(`${kind}:${it.id}`);
+    if (kind !== 'weapon') profile.equipped[kind] = it.id;
+    saveProfile(profile);
+  }
   sfx.coin();
   renderShop();
 }
 
-function equip(id: string) {
+async function equip(id: string) {
   if (tab === 'weapon') return;
-  profile.equipped[tab] = id;
-  saveProfile(profile);
+  const slot = tab;
+  profile.equipped[slot] = id;
   sfx.click();
   renderShop();
+  if (account.session) {
+    try {
+      useProfile(await account.equipItem(slot, id));
+    } catch (e) {
+      shopError((e as Error).message);
+    }
+    renderShop();
+  } else saveProfile(profile);
+}
+
+function shopError(msg: string) {
+  $('#shop-coins').textContent = String(profile.coins);
+  alert(msg);
 }
 
 function openShop() {
   renderShop();
   show('shop');
-  account.getPayConfig().then((c) => ($('#btn-buy').hidden = !c));
+  account.getPayConfig().then((c) => {
+    $('#btn-buy').hidden = !c;
+    $('#btn-vip').hidden = !c?.vip;
+    $('#btn-vip').textContent = profile.vip ? 'VIP ✓' : 'Get VIP';
+  });
 }
 
 // ------------------------------------------------------------------ buying coins (Whop)
 
 let watchTimer: ReturnType<typeof setInterval> | undefined;
 
-/** After a checkout opens, check the account for the new coins for a few minutes. */
-function watchForCoins() {
+/** After a checkout opens, check the account for the new coins or VIP for a few minutes. */
+function watchForPurchase() {
   clearInterval(watchTimer);
-  const seen = profile.paidSeen ?? 0;
+  const seen = `${profile.paidTotal ?? 0}/${profile.vipUntil ?? 0}`;
   let tries = 0;
   watchTimer = setInterval(async () => {
     if (++tries > 60) return clearInterval(watchTimer);
     const p = await account.fetchProfile().catch(() => null);
-    if (p && (p.paidSeen ?? 0) !== seen) {
+    if (p && `${p.paidTotal ?? 0}/${p.vipUntil ?? 0}` !== seen) {
       clearInterval(watchTimer);
       const added = p.coins - profile.coins;
+      const vipNow = p.vip && !profile.vip;
       useProfile(p);
       sfx.coin();
-      $('#buy-status').textContent = added > 0 ? `${added.toLocaleString('en-US')} coins added. Thank you!` : 'Your purchase was updated.';
+      $('#buy-status').textContent = vipNow
+        ? "You're VIP now. Thank you! Your VIP paint and decal are in the Garage."
+        : added > 0 ? `${added.toLocaleString('en-US')} coins added. Thank you!` : 'Your purchase was updated.';
+      renderVipOffer();
       renderShop();
     }
   }, 5000);
 }
 
+async function checkout(btn: HTMLButtonElement, pack: string) {
+  btn.disabled = true;
+  $('#buy-status').classList.remove('error');
+  $('#buy-status').textContent = 'Opening the secure payment page…';
+  try {
+    await account.buyPack(pack);
+    $('#buy-status').textContent =
+      pack === 'vip' ? 'Finish joining in the page that opened. VIP switches on here automatically.' : 'Finish paying in the page that opened. Your coins will appear here automatically.';
+    watchForPurchase();
+  } catch (e) {
+    $('#buy-status').textContent = (e as Error).message;
+    $('#buy-status').classList.add('error');
+  } finally {
+    btn.disabled = false;
+  }
+}
+
+let vipPrice = '';
+function renderVipOffer() {
+  $('#buy-vip').hidden = !vipPrice || !account.session;
+  $('#vip-price').textContent = profile.vip && profile.vipUntil ? `You're VIP until ${new Date(profile.vipUntil).toLocaleDateString()}` : `${vipPrice} a month`;
+  $('#btn-join-vip').hidden = !!profile.vip;
+}
+$('#btn-join-vip').onclick = () => checkout($<HTMLButtonElement>('#btn-join-vip'), 'vip');
+
 async function openBuy() {
   const c = await account.getPayConfig();
   if (!c) return;
   const fmt = new Intl.NumberFormat('en-US', { style: 'currency', currency: c.currency });
+  vipPrice = c.vip ? fmt.format(c.vip.price) : '';
+  renderVipOffer();
   $('#buy-packs').replaceChildren(
     ...c.packs.map((pk) => {
       const b = document.createElement('button');
@@ -732,21 +1070,7 @@ async function openBuy() {
       price.className = 'price';
       price.textContent = fmt.format(pk.price);
       b.append(amount, name, note, price);
-      b.onclick = async () => {
-        b.disabled = true;
-        $('#buy-status').classList.remove('error');
-        $('#buy-status').textContent = 'Opening the secure payment page…';
-        try {
-          await account.buyPack(pk.id);
-          $('#buy-status').textContent = 'Finish paying in the page that opened. Your coins will appear here automatically.';
-          watchForCoins();
-        } catch (e) {
-          $('#buy-status').textContent = (e as Error).message;
-          $('#buy-status').classList.add('error');
-        } finally {
-          b.disabled = false;
-        }
-      };
+      b.onclick = () => checkout(b, pk.id);
       return b;
     }),
   );
@@ -755,6 +1079,7 @@ async function openBuy() {
 }
 
 $('#btn-buy').onclick = openBuy;
+$('#btn-vip').onclick = openBuy;
 $('#buy-close').onclick = () => {
   renderShop();
   show('shop');
@@ -830,8 +1155,15 @@ $('#btn-result-shop').onclick = () => {
 $('#btn-result-menu').onclick = quitToMenu;
 
 const online: Online = new Online({
+  token: () => account.session?.token ?? null,
+  rankLine: () => (profile.rating !== undefined ? `Your rank: ${rankFor(profile.rating)} (${profile.rating}). Quick matches pair you with players near your rating and move it up or down.` : ''),
+  reward: onlineReward,
+  signedOut: () => {
+    account.logout();
+    renderAccount('Please sign in again.');
+    show('account');
+  },
   info: () => ({
-    name: online.name,
     model: profile.equipped.tank,
     look: myLook(),
     weapons: WEAPONS.filter((w) => owns(profile, 'weapon', w.id)).map((w) => w.id),

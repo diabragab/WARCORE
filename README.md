@@ -90,6 +90,24 @@ set WHOP_SANDBOX=1
 then restart the `WARCORE` scheduled task. In Whop, create a webhook for `https://war-core.online/api/whop/webhook`
 with payment (and refund) events. Remove `WHOP_SANDBOX` to take real payments.
 
+VIP is a monthly Whop membership ($4.99, set in `shared/catalog.json`). Each paid month adds 31 VIP days to the
+account (renewals are matched to the account through the Whop membership id), and a refund takes them away. VIP doubles
+coins from matches, missions and the daily reward, unlocks the VIP paint and decal, and shows a VIP badge.
+
+Every payment and refund is appended to `DATA_DIR/purchases.log` (one JSON line each). Accounts named in
+`ADMIN_USERS` (comma separated, e.g. `set ADMIN_USERS=diab` in `secrets.cmd`) see a "Purchase log" button on their
+account screen.
+
+## Economy, missions and ranks
+
+The server decides every coin (`server/economy.mjs`); the game only asks. Prices live in `shared/catalog.json`, which
+both the game and the server read. Matches against the computer, two-player games and arcade waves are opened with
+`match/start` and paid on `match/finish` with server-side formulas, minimum match lengths, damage caps and a daily cap
+on match coins. Online matches are paid by the match server once both players' reports agree (a player who leaves
+loses). Quick online matches are ranked: Elo from 1000 (K=32), Bronze to Diamond, pairing players with close ratings
+first. Each player also gets a daily reward (with a streak) and three daily missions. `GET /api/leaderboard` feeds the
+leaderboard screen and the landing page.
+
 ## Desktop app (Tauri 2)
 
 Needs Rust (https://rustup.rs) plus the platform prerequisites from https://tauri.app/start/prerequisites/.
@@ -107,8 +125,9 @@ so the Windows app connects to your server for online play.
 
 - `src/game.ts`: match simulation, physics, AI, rendering
 - `src/terrain.ts`: bitmap terrain and themes
-- `src/data.ts`: weapons, tank models, cosmetics and prices
+- `src/data.ts`: weapons, tank models and cosmetics
+- `shared/catalog.json`: prices, VIP items, maps and ranks (read by the game and the server)
 - `src/main.ts`: menus, setup, shop, input
 - `src/online.ts`: online lobby and connection
-- `server/`: match server
+- `server/`: match server (`index.mjs`), accounts, economy, Whop payments
 - `src-tauri/`: desktop wrapper

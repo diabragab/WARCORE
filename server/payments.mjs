@@ -7,7 +7,8 @@
 //   WHOP_SANDBOX=1       use Whop's sandbox (test payments, no real money)
 // Create the webhook in Whop pointing at https://<your domain>/api/whop/webhook with the payment events enabled.
 import { createHmac, timingSafeEqual } from 'node:crypto';
-import { creditCoins, json, readBody, readRaw, userByKey, userFor } from './accounts.mjs';
+import { cors, db, json, logPurchase, persist, readBody, readRaw, userByKey, userFor } from './store.mjs';
+import { CATALOG, addVip, creditCoins, isVip } from './economy.mjs';
 
 const env = process.env;
 const W = {
@@ -26,6 +27,8 @@ export const PACKS = [
   { id: 'convoy', name: 'Supply Convoy', coins: 3500, price: 4.99, note: '500 bonus coins' },
   { id: 'arsenal', name: 'War Chest', coins: 8000, price: 9.99, note: '2,000 bonus coins' },
 ];
+/** Monthly VIP membership: renews through Whop; every paid month adds VIP days to the account. */
+export const VIP = { id: 'vip', name: 'VIP Commander', price: CATALOG.vip.price, days: CATALOG.vip.days };
 
 async function whop(method, path, body) {
   const res = await fetch(API + path, {
@@ -39,9 +42,13 @@ async function whop(method, path, body) {
 }
 
 async function createCheckout(key, pack, returnTo) {
+  const plan =
+    pack === VIP
+      ? { plan_type: 'renewal', initial_price: 0, renewal_price: VIP.price, billing_period: VIP.days, title: 'WARCORE VIP (monthly)' }
+      : { plan_type: 'one_time', initial_price: pack.price, title: `WARCORE ${pack.name}` };
   const c = await whop('POST', '/checkout_configurations', {
     mode: 'payment',
-    plan: { company_id: W.company, currency: CURRENCY.toLowerCase(), initial_price: pack.price, plan_type: 'one_time' },
+    plan: { company_id: W.company, currency: CURRENCY.toLowerCase(), ...plan },
     metadata: { warcore_user: key, warcore_pack: pack.id },
     ...(returnTo ? { redirect_url: returnTo } : {}),
   });
@@ -71,17 +78,37 @@ function signatureOk(req, raw) {
 
 const seen = new Set();
 
-/** Looks the payment up in Whop (rather than trusting the webhook body) and credits or removes the coins. */
+/** Looks the payment up in Whop (rather than trusting the webhook body) and credits or removes coins or VIP time. */
 async function settle(paymentId, refund) {
   const p = await whop('GET', `/payments/${encodeURIComponent(paymentId)}`);
-  const key = p.metadata?.warcore_user;
-  const pack = PACKS.find((x) => x.id === p.metadata?.warcore_pack);
-  if (!key || !pack || !userByKey(key)) return console.log(`Whop payment ${paymentId}: not a WARCORE coin pack, ignored`);
-  if (refund) {
-    if (Number(p.refunded_amount) > 0 || /refund/.test(String(p.status))) creditCoins(key, -pack.coins, `refund:${paymentId}`);
-  } else if (p.status === 'paid' || p.status === 'succeeded' || p.substatus === 'succeeded') {
-    creditCoins(key, pack.coins, paymentId);
-  } else return console.log(`Whop payment ${paymentId} has status ${p.status}, not crediting yet`);
+  const membership = p.membership?.id;
+  // Monthly VIP renewals may not carry the first checkout's details, so the membership is remembered.
+  const link = membership ? db.whop[membership] : null;
+  const key = p.metadata?.warcore_user || link?.key;
+  const packId = p.metadata?.warcore_pack || link?.pack;
+  const pack = packId === VIP.id ? VIP : PACKS.find((x) => x.id === packId);
+  const u = key && userByKey(key);
+  if (!u || !pack) return console.log(`Whop payment ${paymentId}: not a WARCORE purchase, ignored`);
+  if (pack === VIP && membership && !link) {
+    db.whop[membership] = { key: key.toLowerCase(), pack: VIP.id };
+    persist();
+  }
+  const paid = p.status === 'paid' || p.status === 'succeeded' || p.substatus === 'succeeded';
+  const refunded = Number(p.refunded_amount) > 0 || /refund|dispute_lost/.test(String(p.substatus)) || /refund/.test(String(p.status));
+  if (refund ? !refunded : !paid) return console.log(`Whop payment ${paymentId} has status ${p.status}/${p.substatus}, nothing to do yet`);
+  const tx = refund ? `refund:${paymentId}` : paymentId;
+  const changed = pack === VIP ? addVip(key, refund ? -(VIP.days + 1) : VIP.days + 1, tx) : creditCoins(key, refund ? -pack.coins : pack.coins, tx);
+  if (!changed) return;
+  logPurchase({
+    type: refund ? 'refund' : 'payment',
+    player: u.name,
+    item: pack.id,
+    coins: pack === VIP ? 0 : refund ? -pack.coins : pack.coins,
+    amount: Number(refund ? p.refunded_amount ?? p.total : p.total ?? pack.price) || pack.price,
+    currency: String(p.currency || CURRENCY).toUpperCase(),
+    payment: paymentId,
+    reason: p.billing_reason || null,
+  });
   console.log(`Whop ${refund ? 'refund' : 'payment'} ${paymentId}: ${pack.id} for ${key}`);
 }
 
@@ -109,21 +136,20 @@ export async function handlePayments(req, res, path) {
   }
 
   if (!path.startsWith('/api/pay/')) return false;
-  res.setHeader('access-control-allow-origin', '*');
-  res.setHeader('access-control-allow-headers', 'content-type, authorization');
-  res.setHeader('access-control-allow-methods', 'GET, POST, OPTIONS');
-  if (req.method === 'OPTIONS') return res.writeHead(204).end(), true;
+  if (cors(req, res)) return true;
 
   if (path === '/api/pay/config' && req.method === 'GET') {
-    return json(res, 200, { enabled: enabled(), sandbox: W.sandbox, currency: CURRENCY, packs: PACKS }), true;
+    return json(res, 200, { enabled: enabled(), sandbox: W.sandbox, currency: CURRENCY, packs: PACKS, vip: VIP }), true;
   }
   if (path === '/api/pay/checkout' && req.method === 'POST') {
     if (!enabled()) return json(res, 503, { error: 'Coin purchases are not available yet.' }), true;
     const who = userFor(req);
     if (!who?.user) return json(res, 401, { error: 'Please sign in again.' }), true;
     const body = await readBody(req).catch(() => ({}));
-    const pack = PACKS.find((p) => p.id === body.pack);
+    const pack = body.pack === VIP.id ? VIP : PACKS.find((p) => p.id === body.pack);
     if (!pack) return json(res, 400, { error: 'Unknown coin pack.' }), true;
+    if (pack === VIP && isVip(who.user) && who.user.vipUntil - Date.now() > 5 * 86_400_000)
+      return json(res, 409, { error: `You're already VIP until ${new Date(who.user.vipUntil).toDateString()}.` }), true;
     const host = req.headers['x-forwarded-host'] || req.headers.host;
     const returnTo = host && !/^(127\.|localhost)/.test(host) ? `https://${host}/play/` : undefined;
     try {

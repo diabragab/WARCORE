@@ -47,9 +47,9 @@ async function call<T>(method: string, path: string, body?: unknown): Promise<T>
 
 type AuthReply = { name: string; token: string; profile: Profile };
 
-/** Creates an account that starts with this browser's current progress. */
-export async function register(name: string, password: string, profile: Profile): Promise<Profile> {
-  const r = await call<AuthReply>('POST', 'register', { name, password, profile });
+/** Creates an account. Every account starts with the same fresh profile. */
+export async function register(name: string, password: string): Promise<Profile> {
+  const r = await call<AuthReply>('POST', 'register', { name, password });
   setSession({ name: r.name, token: r.token });
   return r.profile;
 }
@@ -72,33 +72,28 @@ export async function fetchProfile(): Promise<Profile | null> {
   return (await call<{ profile: Profile }>('GET', 'profile')).profile;
 }
 
-/** Called with the server's copy after each save, which can include newly bought coins. */
-export let onServerProfile: ((p: Profile) => void) | null = null;
-export const setOnServerProfile = (fn: (p: Profile) => void) => (onServerProfile = fn);
+// Everything that changes coins is decided by the server; these ask it and return the updated profile.
 
-let pending: Profile | null = null;
-let timer: ReturnType<typeof setTimeout> | undefined;
+export const buyItem = async (item: string) => (await call<{ profile: Profile }>('POST', 'buy', { item })).profile;
+export const equipItem = async (slot: string, id: string) => (await call<{ profile: Profile }>('POST', 'equip', { slot, id })).profile;
+export const claimDaily = () => call<{ coins: number; streak: number; profile: Profile }>('POST', 'daily', {});
 
-/** Saves progress to the account shortly after each change (purchases, match rewards). */
-export function pushProfile(p: Profile) {
-  if (!session) return;
-  pending = structuredClone(p);
-  clearTimeout(timer);
-  timer = setTimeout(async () => {
-    const body = pending;
-    pending = null;
-    try {
-      const r = await call<{ profile: Profile }>('PUT', 'profile', { profile: body });
-      onServerProfile?.(r.profile);
-    } catch {
-      // Keep it for the next change if the server couldn't be reached.
-      if (!pending && session) pending = body;
-    }
-  }, 400);
-}
+export interface MissionDone { text: string; coins: number }
+export interface MatchReward { coins: number; missions: MissionDone[]; note?: string; over?: boolean; wave?: number; profile: Profile }
+
+/** Tells the server a match started; the id it returns is needed to collect the reward. */
+export const matchStart = async (mode: 'ai' | 'local' | 'arcade', diff?: string) => (await call<{ id: string }>('POST', 'match/start', { mode, diff })).id;
+export const matchFinish = (body: { id: string; won: boolean; damage: number; kills?: number; weaponKills?: Record<string, number> }) =>
+  call<MatchReward>('POST', 'match/finish', body);
+
+export interface Leader { name: string; value: number; rank: string; vip: boolean }
+export const leaderboard = () => call<{ rating: Leader[]; wins: Leader[]; arcade: Leader[] }>('GET', '/api/leaderboard');
+
+export interface Purchase { time: string; type: 'payment' | 'refund'; player: string; item: string; coins: number; amount: number; currency: string; payment: string; reason: string | null }
+export const purchases = async () => (await call<{ purchases: Purchase[] }>('GET', '/api/admin/purchases')).purchases;
 
 export interface CoinPack { id: string; name: string; coins: number; price: number; note?: string }
-export interface PayConfig { enabled: boolean; sandbox: boolean; currency: string; packs: CoinPack[] }
+export interface PayConfig { enabled: boolean; sandbox: boolean; currency: string; packs: CoinPack[]; vip?: { id: string; name: string; price: number; days: number } }
 
 let payConfig: Promise<PayConfig | null> | null = null;
 /** Coin packs on sale, or null if payments aren't set up on the server. */
@@ -110,7 +105,7 @@ export function getPayConfig(): Promise<PayConfig | null> {
   return payConfig;
 }
 
-/** Opens the Whop checkout for a coin pack in the player's browser. */
+/** Opens the Whop checkout for a coin pack (or 'vip' for the monthly membership) in the player's browser. */
 export async function buyPack(pack: string) {
   const tauri = '__TAURI_INTERNALS__' in window;
   // Open the tab during the click so popup blockers allow it. (window.open with 'noopener' always returns null,

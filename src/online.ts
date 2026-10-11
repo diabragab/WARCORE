@@ -7,11 +7,28 @@ export interface OnlineStart {
   theme: string;
   first: number;
   you: number;
-  players: Omit<PlayerSetup, 'color'>[];
+  ranked: boolean;
+  players: (Omit<PlayerSetup, 'color'> & { rating?: number; rank?: string; vip?: boolean })[];
+}
+
+/** What the server worked out after an online match. */
+export interface OnlineReward {
+  coins: number;
+  rating: number;
+  change: number;
+  rank: string;
+  ranked: boolean;
+  missions: { text: string; coins: number }[];
+  profile: unknown;
 }
 
 interface Hooks {
-  info: () => { name: string; model: string; look: Look; weapons: string[] };
+  info: () => { model: string; look: Look; weapons: string[] };
+  token: () => string | null;
+  /** Short description of the player's rank for the search screen, e.g. "Silver · 1130". */
+  rankLine: () => string;
+  reward: (r: OnlineReward) => void;
+  signedOut: () => void;
   start: (s: OnlineStart) => void;
   message: (m: NetMsg) => void;
   opponentLeft: () => void;
@@ -77,19 +94,10 @@ export class Online {
     };
   }
 
-  get name(): string {
-    return $<HTMLInputElement>('#on-name').value.trim() || 'Commander';
-  }
-
   /** Opening Online goes straight into matchmaking. */
   open() {
     this.leave();
-    let name = store(NAME_KEY);
-    if (!name) {
-      name = `Tanker${Math.floor(1000 + Math.random() * 9000)}`;
-      store(NAME_KEY, name);
-    }
-    $<HTMLInputElement>('#on-name').value = name;
+    $('#on-rank').textContent = this.hooks.rankLine();
     $<HTMLInputElement>('#on-server').value = store(SERVER_KEY) ?? defaultServer();
     $('#on-pick').hidden = false;
     $('#on-wait').hidden = true;
@@ -125,7 +133,6 @@ export class Online {
   private connect(first: { t: 'quick' } | { t: 'create' } | { t: 'join'; code: string }) {
     if (first.t !== 'quick') this.view('idle');
     this.leave();
-    store(NAME_KEY, this.name);
     const url = $<HTMLInputElement>('#on-server').value.trim();
     if (url !== defaultServer()) store(SERVER_KEY, url);
     this.status(first.t === 'quick' ? '' : 'Connecting…');
@@ -140,7 +147,7 @@ export class Online {
     ws.onopen = () => {
       opened = true;
       if (first.t !== 'quick') this.status(first.t === 'create' ? 'Creating a room…' : 'Joining…');
-      ws.send(JSON.stringify({ ...first, info: this.hooks.info() }));
+      ws.send(JSON.stringify({ ...first, token: this.hooks.token(), info: this.hooks.info() }));
     };
     ws.onmessage = (ev) => this.receive(JSON.parse(ev.data));
     ws.onclose = () => {
@@ -158,7 +165,11 @@ export class Online {
     switch (m.t) {
       case 'queued': {
         const n = Number(m.online) || 1;
-        $('#on-count').textContent = n > 1 ? `${n} players online. You'll be matched with the next player who searches.` : "You're the only one searching right now. The match starts as soon as someone else joins.";
+        const searching = Number(m.searching) || 1;
+        $('#on-count').textContent =
+          searching > 1
+            ? `${searching} players searching, ${n} online. You'll be matched with someone near your rank.`
+            : `${n > 1 ? `${n} players online, but you're` : "You're"} the only one searching right now. The match starts as soon as someone else searches.`;
         break;
       }
       case 'created':
@@ -168,7 +179,12 @@ export class Online {
         this.status('Waiting for your friend to join…');
         break;
       case 'error':
+        this.view('idle');
         this.status(String(m.message), true);
+        if (m.auth) this.hooks.signedOut();
+        break;
+      case 'reward':
+        this.hooks.reward(m as unknown as OnlineReward);
         break;
       case 'start':
         this.inGame = true;
@@ -190,6 +206,11 @@ export class Online {
 
   relay(data: NetMsg) {
     if (this.ws?.readyState === WebSocket.OPEN) this.ws.send(JSON.stringify({ t: 'relay', data }));
+  }
+
+  /** This device's view of how the match ended; the server compares it with the opponent's. */
+  report(winner: number | null, damage: number[], weaponKills: Record<string, number>[]) {
+    if (this.ws?.readyState === WebSocket.OPEN) this.ws.send(JSON.stringify({ t: 'result', winner, damage, weaponKills }));
   }
 
   rematch() {

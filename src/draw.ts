@@ -247,6 +247,24 @@ function drawDecal(ctx: CanvasRenderingContext2D, decal: string, m: TankModel, p
       ctx.fillRect(-4, cy - 1.5, 1.6, 1.6);
       ctx.fillRect(-1.6, cy - 1.5, 1.6, 1.6);
       break;
+    case 'crown': {
+      const w = g.bodyH * 1.1, h = g.bodyH * 0.55;
+      ctx.fillStyle = '#f2c84b';
+      ctx.strokeStyle = '#8a6514';
+      ctx.lineWidth = 0.8;
+      ctx.beginPath();
+      ctx.moveTo(-w / 2 - 2, cy + h / 2);
+      ctx.lineTo(-w / 2 - 2, cy - h / 2);
+      ctx.lineTo(-w / 4 - 2, cy);
+      ctx.lineTo(-2, cy - h / 2 - 1.5);
+      ctx.lineTo(w / 4 - 2, cy);
+      ctx.lineTo(w / 2 - 2, cy - h / 2);
+      ctx.lineTo(w / 2 - 2, cy + h / 2);
+      ctx.closePath();
+      ctx.fill();
+      ctx.stroke();
+      break;
+    }
   }
   ctx.restore();
 }

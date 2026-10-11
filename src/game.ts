@@ -1,5 +1,5 @@
 import { Terrain, THEMES, W, H, WATER, type Theme } from './terrain';
-import { BOMBLET, modelById, weaponById, type Look, type TankModel, type Weapon } from './data';
+import { AIRBOMB, BOMBLET, modelById, weaponById, type Look, type TankModel, type Weapon } from './data';
 import { D2R, drawTank, pivotHeight, roundRect, shade, trailColor } from './draw';
 import { mulberry32 } from './rng';
 import { sfx } from './sfx';
@@ -20,7 +20,7 @@ export interface PlayerSetup {
 
 export interface MatchResult {
   winnerTeam: number | null;
-  players: { name: string; team: number; damage: number; ai?: Difficulty; alive: boolean; hp: number }[];
+  players: { name: string; team: number; damage: number; ai?: Difficulty; alive: boolean; hp: number; kills: number; weaponKills: Record<string, number> }[];
 }
 
 export interface GameOptions {
@@ -37,7 +37,7 @@ export interface GameOptions {
   hero?: number;
 }
 
-interface TankState { x: number; y: number; hp: number; alive: boolean; drowned: boolean; damage: number; ammo: number[] }
+interface TankState { x: number; y: number; hp: number; alive: boolean; drowned: boolean; damage: number; ammo: number[]; kills?: number; weaponKills?: Record<string, number> }
 
 /**
  * Online turns: the shooter's device is in charge of its own turn. It streams its aim,
@@ -86,6 +86,10 @@ interface Tank {
   damage: number;
   recoil: number;
   trackPhase: number;
+  kills: number;
+  weaponKills: Record<string, number>;
+  /** Who hit this tank last and with what, so a kill can be credited (drownings and falls included). */
+  lastHit: { by: Tank; weapon: string } | null;
 }
 
 interface Body {
@@ -205,7 +209,7 @@ export class Game {
         x, y, vx: 0, vy: 0, grounded: false, tilt: 0,
         hp: Math.min(model.hp, p.hp ?? model.hp), maxHp: model.hp, hpShown: Math.min(model.hp, p.hp ?? model.hp), alive: true, drowned: false,
         elev: 45, facing: x < W / 2 ? 1 : -1, power: 0, lastPower: -1, charging: false,
-        fuel: model.fuel, moveAcc: 0, arsenal, wi: 0, damage: 0, recoil: 0, trackPhase: 0,
+        fuel: model.fuel, moveAcc: 0, arsenal, wi: 0, damage: 0, recoil: 0, trackPhase: 0, kills: 0, weaponKills: {}, lastHit: null,
       });
     });
   }
@@ -221,6 +225,13 @@ export class Game {
     sky.addColorStop(1, t.skyBottom);
     g.fillStyle = sky;
     g.fillRect(0, 0, W, H);
+    if (t.stars)
+      for (let i = 0; i < 220; i++) {
+        g.globalAlpha = 0.3 + this.rnd() * 0.7;
+        g.fillStyle = '#ffffff';
+        g.fillRect(this.rnd() * W, this.rnd() * H * 0.55, 1 + this.rnd() * 1.5, 1 + this.rnd() * 1.5);
+      }
+    g.globalAlpha = 1;
     const sx = 300 + this.rnd() * 1000, sy = 170 + this.rnd() * 80;
     const glow = g.createRadialGradient(sx, sy, 10, sx, sy, 220);
     glow.addColorStop(0, t.sun);
@@ -242,7 +253,7 @@ export class Game {
       g.lineTo(W, H);
       g.fill();
     };
-    if (t.warzone) this.paintRuins(g);
+    if (t.warzone || t.skyline) this.paintRuins(g);
     else {
       g.globalAlpha = 0.55;
       ridge(t.far, H * 0.42, 50, 0.004);
@@ -272,7 +283,7 @@ export class Game {
         g.lineTo(x + w, H);
         g.fill();
         if (this.rnd() < 0.25) g.fillRect(x + w * 0.5, top - 60, 3, 60); // antenna
-        if (this.rnd() < 0.35) {
+        if (t.warzone && this.rnd() < 0.35) {
           const fire = g.createRadialGradient(x + w / 2, base, 4, x + w / 2, base, 120);
           fire.addColorStop(0, 'rgba(255,120,40,0.35)');
           fire.addColorStop(1, 'rgba(255,60,20,0)');
@@ -287,6 +298,7 @@ export class Game {
     layer(t.far, H * 0.5, 80, 240, 0.8);
     layer(t.near, H * 0.62, 60, 200, 0.9);
     g.globalAlpha = 1;
+    if (!t.warzone) return;
     const haze = g.createLinearGradient(0, H * 0.35, 0, H * 0.75);
     haze.addColorStop(0, 'rgba(120,30,15,0)');
     haze.addColorStop(1, 'rgba(120,30,15,0.35)');
@@ -592,7 +604,7 @@ export class Game {
       } else {
         this.opts.net.send({
           k: 'sync',
-          tanks: this.tanks.map((t) => ({ x: t.x, y: t.y, hp: t.hp, alive: t.alive, drowned: t.drowned, damage: t.damage, ammo: t.arsenal.map((a) => a.ammo) })),
+          tanks: this.tanks.map((t) => ({ x: t.x, y: t.y, hp: t.hp, alive: t.alive, drowned: t.drowned, damage: t.damage, ammo: t.arsenal.map((a) => a.ammo), kills: t.kills, weaponKills: t.weaponKills })),
           hash: this.terrain.hash(),
           terrain: this.terrain.encode(),
         });
@@ -603,6 +615,11 @@ export class Game {
       if (t.alive && t.hp <= 0) {
         t.alive = false;
         died = true;
+        const h = t.lastHit;
+        if (h && h.by.team !== t.team) {
+          h.by.kills++;
+          h.by.weaponKills[h.weapon] = (h.by.weaponKills[h.weapon] ?? 0) + 1;
+        }
         if (!t.drowned) this.explode(t.x, t.y - 8, { radius: 38, damage: 20 }, null);
       }
     }
@@ -624,6 +641,7 @@ export class Game {
       const t = this.tanks[i];
       if (!t) return;
       Object.assign(t, { x: s.x, y: s.y, hp: s.hp, alive: s.alive, drowned: s.drowned, damage: s.damage, vx: 0, vy: 0, grounded: true });
+      if (s.kills !== undefined) Object.assign(t, { kills: s.kills, weaponKills: { ...s.weaponKills } });
       s.ammo.forEach((a, j) => t.arsenal[j] && (t.arsenal[j].ammo = a));
     });
     if (this.terrain.hash() !== m.hash) this.terrain.decode(m.terrain, this.opts.seed);
@@ -667,7 +685,9 @@ export class Game {
     const alive = this.tanks.filter((t) => t.alive);
     return {
       winnerTeam: alive.length ? alive[0].team : null,
-      players: this.tanks.map((t) => ({ name: t.name, team: t.team, damage: t.damage, ai: t.ai, alive: t.alive, hp: t.alive ? Math.max(1, Math.round(t.hp)) : 0 })),
+      players: this.tanks.map((t) => ({
+        name: t.name, team: t.team, damage: t.damage, ai: t.ai, alive: t.alive, hp: t.alive ? Math.max(1, Math.round(t.hp)) : 0, kills: t.kills, weaponKills: { ...t.weaponKills },
+      })),
     };
   }
 
@@ -714,7 +734,8 @@ export class Game {
     for (const p of list) {
       p.trail.unshift({ x: p.x, y: p.y });
       if (p.trail.length > 26) p.trail.pop();
-      const hit = this.advance(p, dt);
+      if (p.w.kind === 'homing') this.steer(p, dt);
+      const hit = p.age > 9 ? 'terrain' : this.advance(p, dt);
       if (!hit) {
         keep.push(p);
         continue;
@@ -736,9 +757,44 @@ export class Game {
         keep.push(p);
         continue;
       }
+      if (hit === 'tank' && p.w.kind === 'homing') {
+        // A homing missile that reaches a tank strikes it square, wherever it touched the hull.
+        const t = this.tankAt(p.x, p.y, p.owner, p.age)!;
+        p.x = t.x;
+        p.y = t.y - (t.model.geo.treadH + t.model.geo.bodyH) / 2;
+      }
       this.impact(p);
     }
     this.projectiles = keep.concat(this.projectiles);
+  }
+
+  /** Homing missile: shortly after launch it turns toward the nearest enemy. */
+  private steer(p: Proj, dt: number) {
+    if (p.age < 0.5) return;
+    let best: Tank | null = null, bd = Infinity;
+    for (const t of this.tanks) {
+      if (!t.alive || t.team === p.owner?.team) continue;
+      const d = Math.hypot(t.x - p.x, t.y - p.y);
+      if (d < bd) (bd = d), (best = t);
+    }
+    if (!best) return;
+    const g = best.model.geo;
+    // Fly in high over the hills, then dive once it's nearly above the target.
+    const dx = best.x - p.x;
+    const lift = Math.max(0, Math.min(220, (Math.abs(dx) - 50) * 0.45));
+    const want = Math.atan2(best.y - (g.treadH + g.bodyH) / 2 - lift - p.y, dx);
+    const cur = Math.atan2(p.vy, p.vx);
+    let diff = want - cur;
+    while (diff > Math.PI) diff -= Math.PI * 2;
+    while (diff < -Math.PI) diff += Math.PI * 2;
+    const rate = bd < 260 ? 6 : 3.6;
+    const turn = Math.max(-rate * dt, Math.min(rate * dt, diff));
+    const speed = Math.max(300, Math.min(560, Math.hypot(p.vx, p.vy)));
+    // Cancel this frame's wind and most of the gravity, so the missile flies where it points.
+    p.vx = Math.cos(cur + turn) * speed - this.wind * dt;
+    p.vy = Math.sin(cur + turn) * speed - 300 * dt * 0.85;
+    if (Math.random() < 0.6)
+      this.particles.push({ x: p.x, y: p.y, vx: -p.vx * 0.1, vy: -p.vy * 0.1, life: 0.3, max: 0.3, size: 4, color: '', kind: 'fire', grav: 0 });
   }
 
   private normalAt(x: number, y: number) {
@@ -756,6 +812,8 @@ export class Game {
 
   private impact(p: Proj) {
     const w = p.w;
+    if (w.kind === 'teleport') return this.teleport(p);
+    if (w.kind === 'airstrike') return this.callAirstrike(p);
     if (w.kind === 'dirt') {
       this.terrain.add(p.x, p.y, w.radius);
       this.shake = 4;
@@ -763,7 +821,7 @@ export class Game {
       for (let i = 0; i < 16; i++) this.debris(p.x, p.y, 120);
       return;
     }
-    this.explode(p.x, p.y, w, p.owner);
+    this.explode(p.x, p.y, w, p.owner, w.id === 'bomblet' ? 'cluster' : w.id);
     if (w.kind === 'cluster') {
       const br = mulberry32(this.opts.seed ^ Math.imul(Math.round(p.x), 73856093) ^ Math.imul(Math.round(p.y), 19349663));
       for (let i = 0; i < 5; i++) {
@@ -776,6 +834,38 @@ export class Game {
     }
   }
 
+  /** Teleporter: the tank that fired it reappears where it landed. */
+  private teleport(p: Proj) {
+    const t = p.owner;
+    if (!t || !t.alive) return;
+    const flash = (x: number, y: number) => {
+      for (let i = 0; i < 22; i++) {
+        const a = (i / 22) * Math.PI * 2;
+        this.particles.push({ x, y: y - 12, vx: Math.cos(a) * 120, vy: Math.sin(a) * 120, life: 0.5, max: 0.5, size: 2, color: '#7ff5ee', kind: 'spark', grav: 0 });
+      }
+      this.particles.push({ x, y: y - 12, vx: 0, vy: 0, life: 0.45, max: 0.45, size: 46, color: '#7ff5ee', kind: 'ring', grav: 0 });
+    };
+    flash(t.x, t.y);
+    t.x = Math.max(12, Math.min(W - 12, p.px));
+    t.y = Math.min(p.py, WATER - 4);
+    t.vx = 0;
+    t.vy = 0;
+    t.grounded = false;
+    flash(t.x, t.y);
+    this.snd(() => sfx.bounce());
+  }
+
+  /** Airstrike: the flare marks the spot and five bombs fall on it one after another. */
+  private callAirstrike(p: Proj) {
+    for (let i = 0; i < 14; i++)
+      this.particles.push({ x: p.px, y: p.py, vx: (this.rnd() - 0.5) * 30, vy: -40 - this.rnd() * 60, life: 1.4, max: 1.4, size: 6 + this.rnd() * 6, color: '#ff4a3a', kind: 'smoke', grav: -10 });
+    for (let i = 0; i < 5; i++) {
+      const x = p.px + (i - 2) * 34, y = -40 - i * 70;
+      this.projectiles.push({ x, y, px: x, py: y, vx: -this.wind * 1.2, vy: 260, age: 0, owner: p.owner, w: AIRBOMB, bounces: 0, trail: [], look: p.look });
+    }
+    this.snd(() => sfx.click());
+  }
+
   private hurt(t: Tank, dmg: number, by: Tank | null) {
     if (dmg <= 0 || !t.alive) return;
     t.hp -= dmg;
@@ -785,7 +875,7 @@ export class Game {
     });
   }
 
-  private explode(x: number, y: number, w: { radius: number; damage: number }, owner: Tank | null) {
+  private explode(x: number, y: number, w: { radius: number; damage: number }, owner: Tank | null, weapon = '') {
     const r = w.radius;
     this.terrain.carve(x, y, r);
     for (const t of this.tanks) {
@@ -796,7 +886,9 @@ export class Game {
       const reach = r + g.bodyW * 0.3;
       if (d >= reach) continue;
       const f = Math.max(0, Math.min(1, 1 - Math.max(0, d - 8) / reach));
-      this.hurt(t, Math.round(w.damage * f * t.model.armor), owner);
+      const dmg = Math.round(w.damage * f * t.model.armor);
+      if (owner && dmg > 0) t.lastHit = { by: owner, weapon };
+      this.hurt(t, dmg, owner);
       if (w.damage > 0) {
         const a = Math.atan2(cy - y, cx - x);
         const imp = f * w.damage * 5.5;
@@ -929,7 +1021,7 @@ export class Game {
     let wi = 0;
     const usable = t.arsenal
       .map((s, i) => ({ s, i }))
-      .filter(({ s }) => s.ammo !== 0 && s.w.kind !== 'dirt' && s.w.kind !== 'bouncer')
+      .filter(({ s }) => s.ammo !== 0 && s.w.kind !== 'dirt' && s.w.kind !== 'bouncer' && s.w.kind !== 'teleport')
       .filter(({ s }) => Math.hypot(tx - t.x, ty - t.y) > s.w.radius + 50);
     if (usable.length) {
       if (t.ai === 'easy') wi = usable[Math.floor(this.rnd() * usable.length)].i;
@@ -1201,7 +1293,10 @@ export class Game {
     };
     if (t.name === 'Tundra')
       spawn(40, () => ({ x: Math.random() * (W + 200) - 100, y: -10, vx: 0, vy: 30 + Math.random() * 30, life: 30, max: 30, size: 1.5 + Math.random() * 2, color: 'rgba(255,255,255,0.85)', kind: 'flake', grav: 0 }));
-    else if (t.name === 'Desert')
+    else if (t.lava) {
+      spawn(14, () => ({ x: Math.random() * (W + 200) - 100, y: -10, vx: 0, vy: 18 + Math.random() * 20, life: 40, max: 40, size: 1.5 + Math.random() * 1.5, color: 'rgba(90,84,80,0.8)', kind: 'flake', grav: 0 }));
+      spawn(10, () => ({ x: Math.random() * W, y: WATER, vx: (Math.random() - 0.5) * 20, vy: -40 - Math.random() * 60, life: 2.5, max: 2.5, size: 1.5 + Math.random() * 1.5, color: Math.random() < 0.5 ? '#ff8a3a' : '#ffcf6a', kind: 'spark', grav: -4 }));
+    } else if (t.name === 'Desert')
       spawn(10, () => ({ x: Math.random() * W, y: H * 0.4 + Math.random() * H * 0.4, vx: 0, vy: -4, life: 6, max: 6, size: 1.5, color: 'rgba(240,210,160,0.6)', kind: 'flake', grav: 0 }));
     for (const p of this.particles) if (p.kind === 'flake') {
       p.vx += (this.wind * 0.6 - p.vx) * dt;
@@ -1243,6 +1338,16 @@ export class Game {
     }
     ctx.stroke();
     ctx.globalAlpha = 1;
+    if (this.theme.lava) {
+      ctx.save();
+      ctx.globalCompositeOperation = 'lighter';
+      const glow = ctx.createLinearGradient(0, WATER - 90, 0, WATER + 10);
+      glow.addColorStop(0, 'rgba(255,90,20,0)');
+      glow.addColorStop(1, `rgba(255,110,30,${0.22 + Math.sin(this.time * 2) * 0.05})`);
+      ctx.fillStyle = glow;
+      ctx.fillRect(0, WATER - 90, W, 100);
+      ctx.restore();
+    }
   }
 
   /** Darkened corners plus a brief warm flash after big explosions. */
