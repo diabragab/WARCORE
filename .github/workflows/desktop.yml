@@ -1,0 +1,32 @@
+name: Desktop builds
+
+on:
+  push:
+    tags: ['v*']
+  workflow_dispatch:
+
+jobs:
+  build:
+    strategy:
+      fail-fast: false
+      matrix:
+        platform: [windows-latest, macos-latest, ubuntu-22.04]
+    runs-on: ${{ matrix.platform }}
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+      - uses: dtolnay/rust-toolchain@stable
+      - name: Linux libraries
+        if: matrix.platform == 'ubuntu-22.04'
+        run: sudo apt-get update && sudo apt-get install -y libwebkit2gtk-4.1-dev libayatana-appindicator3-dev librsvg2-dev libxdo-dev
+      - run: npm ci
+      - run: npx tauri build
+        env:
+          # Address of the deployed match server, e.g. wss://tanks.onrender.com
+          VITE_SERVER_URL: ${{ vars.TANKS_SERVER_URL }}
+      - uses: actions/upload-artifact@v4
+        with:
+          name: tanks-${{ matrix.platform }}
+          path: src-tauri/target/release/bundle/

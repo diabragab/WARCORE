@@ -1,0 +1,145 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<title>Tanks</title>
+</head>
+<body>
+<div id="app">
+  <canvas id="game" aria-label="Battlefield"></canvas>
+
+  <section id="menu" class="screen">
+    <div class="menu-col">
+      <p class="eyebrow">Turn-based artillery</p>
+      <h1 class="logo">TANKS</h1>
+      <p class="tagline">Set your angle, read the wind, and blow the ground out from under your rival.</p>
+      <nav class="menu-actions">
+        <button id="btn-ai" class="btn primary">Play vs Computer</button>
+        <button id="btn-local" class="btn">Two Players · one keyboard</button>
+        <button id="btn-online" class="btn">Online match</button>
+        <button id="btn-shop" class="btn">Garage &amp; Shop</button>
+      </nav>
+      <div class="menu-foot">
+        <span class="coins" id="menu-coins"></span>
+        <span id="menu-stats" class="muted"></span>
+        <button id="btn-mute" class="link">Sound on</button>
+      </div>
+    </div>
+  </section>
+
+  <section id="setup" class="screen" hidden>
+    <div class="panel setup-panel">
+      <p class="eyebrow" id="setup-eyebrow">Match setup</p>
+      <h2 id="setup-title">Play vs Computer</h2>
+      <div class="field">
+        <span class="label">Battlefield</span>
+        <div class="chips" id="pick-map"></div>
+      </div>
+      <div class="field" id="field-diff">
+        <span class="label">Opponent</span>
+        <div class="chips" id="pick-diff"></div>
+      </div>
+      <div class="field" id="field-p2" hidden>
+        <span class="label">Player 2 tank</span>
+        <div class="chips" id="pick-p2-tank"></div>
+        <span class="label">Player 2 paint</span>
+        <div class="chips" id="pick-p2-paint"></div>
+      </div>
+      <p class="hint" id="setup-hint"></p>
+      <div class="row">
+        <button class="btn ghost" data-back>Back</button>
+        <button class="btn primary" id="btn-start">Start match</button>
+      </div>
+    </div>
+  </section>
+
+  <section id="shop" class="screen" hidden>
+    <div class="panel shop-panel">
+      <header class="shop-head">
+        <div>
+          <p class="eyebrow">Garage &amp; Shop</p>
+          <h2>Spend your coins</h2>
+        </div>
+        <span class="coins big" id="shop-coins"></span>
+      </header>
+      <div class="tabs" role="tablist" id="shop-tabs"></div>
+      <div class="grid" id="shop-grid"></div>
+      <div class="row"><button class="btn ghost" data-back>Back to menu</button></div>
+    </div>
+  </section>
+
+ <section id="online" class="screen" hidden>
+    <div class="panel setup-panel">
+      <p class="eyebrow">Online match</p>
+      <h2>Play a friend online</h2>
+      <div class="field">
+        <label class="label" for="on-name">Your name</label>
+        <input id="on-name" class="input" maxlength="16" autocomplete="nickname">
+      </div>
+      <div id="on-pick" class="col">
+        <button class="btn primary" id="on-create">Create a room</button>
+        <div class="field">
+          <label class="label" for="on-code">Or join with a code</label>
+          <div class="join">
+            <input id="on-code" class="input code-input" maxlength="4" placeholder="ABCD" autocomplete="off" spellcheck="false">
+            <button class="btn" id="on-join">Join</button>
+          </div>
+        </div>
+      </div>
+      <div id="on-wait" class="field" hidden>
+        <span class="label">Room code</span>
+        <p class="room-code" id="on-room"></p>
+        <p class="hint">Send this code to your friend. The match starts as soon as they join.</p>
+      </div>
+      <p class="hint status" id="on-status" role="status"></p>
+      <details class="server">
+        <summary>Server address</summary>
+        <input id="on-server" class="input" spellcheck="false">
+      </details>
+      <div class="row"><button class="btn ghost" id="on-back">Back</button></div>
+    </div>
+  </section>
+
+  <section id="pause" class="overlay" hidden>
+    <div class="panel small">
+      <h2>Paused</h2>
+      <div class="col">
+        <button class="btn primary" id="btn-resume">Resume</button>
+        <button class="btn" id="btn-pause-mute">Sound on</button>
+        <button class="btn ghost" id="btn-quit">Quit to menu</button>
+      </div>
+    </div>
+  </section>
+
+  <section id="result" class="overlay" hidden>
+    <div class="panel small">
+      <p class="eyebrow" id="result-eyebrow">Match over</p>
+      <h2 id="result-title"></h2>
+      <table class="scores" id="result-table"></table>
+      <p class="earned" id="result-coins"></p>
+      <div class="col">
+        <button class="btn primary" id="btn-rematch">Rematch</button>
+        <button class="btn" id="btn-result-shop">Garage &amp; Shop</button>
+        <button class="btn ghost" id="btn-result-menu">Main menu</button>
+      </div>
+    </div>
+  </section>
+
+  <div id="touch" hidden>
+    <div class="pad">
+      <button data-k="left" aria-label="Drive left">◀</button>
+      <button data-k="up" aria-label="Aim up">▲</button>
+      <button data-k="down" aria-label="Aim down">▼</button>
+      <button data-k="right" aria-label="Drive right">▶</button>
+    </div>
+    <div class="pad">
+      <button id="t-weapon" aria-label="Next weapon">⟳</button>
+      <button id="t-pause" aria-label="Pause">II</button>
+      <button data-k="fire" class="fire" aria-label="Hold to fire">FIRE</button>
+    </div>
+  </div>
+</div>
+<script type="module" src="/src/main.ts"></script>
+</body>
+</html>

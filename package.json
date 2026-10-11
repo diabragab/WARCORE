@@ -1,0 +1,25 @@
+{
+  "name": "tanks",
+  "private": true,
+  "version": "0.1.0",
+  "type": "module",
+  "scripts": {
+    "dev": "vite",
+    "build": "tsc --noEmit && vite build",
+    "preview": "vite preview",
+    "tauri": "tauri",
+    "build:web": "SINGLE=1 vite build --outDir dist-single && node scripts/artifact.mjs",
+    "server": "node server/index.mjs"
+  },
+  "devDependencies": {
+    "@tauri-apps/cli": "^2.0.0",
+    "typescript": "^5.4.0",
+    "vite": "^5.4.0",
+    "vite-plugin-singlefile": "^2.0.0"
+  },
+  "dependencies": {
+    "@fontsource/black-ops-one": "^5.0.0",
+    "@fontsource/chakra-petch": "^5.0.0",
+    "ws": "^8.22.0"
+  }
+}

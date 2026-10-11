@@ -1,0 +1,7 @@
+# One-click deploy on Render (render.com): hosts the web game and the online match server.
+services:
+  - type: web
+    name: tanks
+    runtime: docker
+    plan: free
+    healthCheckPath: /health
