@@ -77,10 +77,12 @@ if (-not (Get-Service W3SVC -ErrorAction SilentlyContinue)) {
 if (Get-Command Install-WindowsFeature -ErrorAction SilentlyContinue) { Install-WindowsFeature Web-WebSockets | Out-Null }
 else { Enable-WindowsOptionalFeature -Online -FeatureName IIS-WebSockets -All -NoRestart | Out-Null }
 if (-not (Test-Path "$env:windir\System32\inetsrv\rewrite.dll")) {
-  Install-Msi 'https://download.microsoft.com/download/1/2/8/128E2E22-C1B9-44A4-BE2A-5859ED1D4592/rewrite_amd64_en-US.msi' 'rewrite.msi'
+  try { Install-Msi 'https://download.microsoft.com/download/1/2/8/128E2E22-C1B9-44A4-BE2A-5859ED1D4592/rewrite_amd64_en-US.msi' 'rewrite.msi' }
+  catch { throw "Couldn't install IIS URL Rewrite automatically. Install it from https://www.iis.net/downloads/microsoft/url-rewrite and run this script again." }
 }
 if (-not (Test-Path "$env:ProgramFiles\IIS\Application Request Routing")) {
-  Install-Msi 'https://download.microsoft.com/download/E/9/8/E9849D6A-020E-47E4-9FD0-A023E99B54EB/requestRouter_amd64.msi' 'arr.msi'
+  try { Install-Msi 'https://download.microsoft.com/download/E/9/8/E9849D6A-020E-47E4-9FD0-A023E99B54EB/requestRouter_amd64.msi' 'arr.msi' }
+  catch { throw "Couldn't install IIS Application Request Routing automatically. Install it from https://www.iis.net/downloads/microsoft/application-request-routing and run this script again." }
 }
 Import-Module WebAdministration
 Set-WebConfigurationProperty -PSPath 'MACHINE/WEBROOT/APPHOST' -Filter 'system.webServer/proxy' -Name 'enabled' -Value 'True'
@@ -112,5 +114,5 @@ Start-Website 'WARCORE' -ErrorAction SilentlyContinue
 
 Write-Host ''
 Write-Host "Done. The game is at http://$Domain"
-Write-Host 'For HTTPS (needed for online play from the website), get a free certificate with win-acme:'
+Write-Host 'For HTTPS (the Windows app connects over wss://, so this is needed), get a free certificate with win-acme:'
 Write-Host '  https://www.win-acme.com  ->  run wacs.exe, choose "Create certificate (default settings)", then pick the WARCORE site.'

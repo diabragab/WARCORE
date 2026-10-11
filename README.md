@@ -47,6 +47,15 @@ The installer checks whether the server already hosts websites:
   `127.0.0.1:8787`, and the script adds one new site for the domain to your web server and gets a certificate
   with certbot. Your other sites keep working. Use `WARCORE_PORT=<port>` if 8787 is taken.
 
+Windows server with IIS already hosting a website: open PowerShell as Administrator and run
+
+```powershell
+$env:DOMAIN='war-core.online'; irm https://raw.githubusercontent.com/diabragab/tanks/main/deploy/install-windows.ps1 | iex
+```
+
+It installs Node.js, builds the game into `C:\warcore`, runs it on `127.0.0.1:8787` as a startup task, and adds an
+IIS site bound to the domain that forwards to it (URL Rewrite + ARR + WebSockets). Add HTTPS with win-acme.
+
 Run the same command again to update. The Windows build connects to `wss://war-core.online` unless the repo
 variable `WARCORE_SERVER_URL` says otherwise.
 
