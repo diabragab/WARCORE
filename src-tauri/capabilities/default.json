@@ -1,7 +1,7 @@
 {
   "$schema": "../gen/schemas/desktop-schema.json",
   "identifier": "default",
-  "description": "Window controls used by the Settings and Exit buttons.",
+  "description": "Window controls used by the Settings and Exit buttons, and opening the checkout page in the browser.",
   "windows": ["main"],
-  "permissions": ["core:default", "core:window:allow-close", "core:window:allow-set-fullscreen", "core:window:allow-is-fullscreen"]
+  "permissions": ["core:default", "core:window:allow-close", "core:window:allow-set-fullscreen", "core:window:allow-is-fullscreen", "opener:default"]
 }

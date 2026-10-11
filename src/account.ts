@@ -31,7 +31,7 @@ function setSession(s: Session | null) {
 async function call<T>(method: string, path: string, body?: unknown): Promise<T> {
   let res: Response;
   try {
-    res = await fetch(`${serverHttp()}/api/account/${path}`, {
+    res = await fetch(`${serverHttp()}${path.startsWith('/') ? path : `/api/account/${path}`}`, {
       method,
       headers: { 'content-type': 'application/json', ...(session ? { authorization: `Bearer ${session.token}` } : {}) },
       body: body === undefined ? undefined : JSON.stringify(body),
@@ -72,6 +72,10 @@ export async function fetchProfile(): Promise<Profile | null> {
   return (await call<{ profile: Profile }>('GET', 'profile')).profile;
 }
 
+/** Called with the server's copy after each save, which can include newly bought coins. */
+export let onServerProfile: ((p: Profile) => void) | null = null;
+export const setOnServerProfile = (fn: (p: Profile) => void) => (onServerProfile = fn);
+
 let pending: Profile | null = null;
 let timer: ReturnType<typeof setTimeout> | undefined;
 
@@ -84,10 +88,35 @@ export function pushProfile(p: Profile) {
     const body = pending;
     pending = null;
     try {
-      await call('PUT', 'profile', { profile: body });
+      const r = await call<{ profile: Profile }>('PUT', 'profile', { profile: body });
+      onServerProfile?.(r.profile);
     } catch {
       // Keep it for the next change if the server couldn't be reached.
       if (!pending && session) pending = body;
     }
   }, 400);
+}
+
+export interface CoinPack { id: string; name: string; coins: number; price: number; note?: string }
+export interface PayConfig { enabled: boolean; sandbox: boolean; currency: string; packs: CoinPack[] }
+
+let payConfig: Promise<PayConfig | null> | null = null;
+/** Coin packs on sale, or null if payments aren't set up on the server. */
+export function getPayConfig(): Promise<PayConfig | null> {
+  payConfig ??= fetch(`${serverHttp()}/api/pay/config`)
+    .then((r) => (r.ok ? r.json() : null))
+    .then((c: PayConfig | null) => (c?.enabled ? c : null))
+    .catch(() => null);
+  return payConfig;
+}
+
+/** Opens the Xsolla checkout for a coin pack in the player's browser. */
+export async function buyPack(pack: string) {
+  const { url } = await call<{ url: string }>('POST', '/api/pay/checkout', { pack });
+  if ('__TAURI_INTERNALS__' in window) {
+    const { openUrl } = await import('@tauri-apps/plugin-opener');
+    await openUrl(url);
+  } else if (!window.open(url, '_blank', 'noopener')) {
+    location.href = url;
+  }
 }

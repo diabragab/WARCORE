@@ -221,3 +221,12 @@ h2 { margin: 0; font-family: var(--display); font-weight: 700; font-size: 32px; 
 .account-bar .welcome { margin: 0; }
 .btn.small { padding: 6px 12px; font-size: 13px; min-height: 0; }
 #acc-fields { margin-top: 16px; }
+
+.shop-wallet { display: flex; align-items: center; gap: 12px; }
+.packs { display: grid; grid-template-columns: repeat(auto-fit, minmax(170px, 1fr)); gap: 12px; margin: 16px 0; }
+.pack { display: flex; flex-direction: column; align-items: center; gap: 6px; padding: 18px 12px; border: 1px solid var(--line); border-radius: var(--radius); background: rgba(255, 255, 255, 0.03); color: var(--text); font: inherit; cursor: pointer; text-align: center; }
+.pack:hover { border-color: var(--signal); background: rgba(215, 38, 30, 0.1); }
+.pack:disabled { opacity: 0.6; cursor: progress; }
+.pack .amount { font-size: 22px; font-weight: 700; color: #ffd36b; }
+.pack .note { font-size: 12px; color: var(--signal-hi); text-transform: uppercase; letter-spacing: 0.08em; min-height: 1em; }
+.pack .price { font-weight: 600; font-size: 17px; }

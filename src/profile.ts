@@ -8,6 +8,8 @@ export interface Profile {
   owned: string[];
   equipped: { tank: string; paint: string; decal: string; trail: string };
   stats: { played: number; wins: number; arcadeBest: number };
+  /** Bought coins already counted in this copy (the server adds any newer purchases when it saves). */
+  paidSeen?: number;
 }
 
 const fresh = (): Profile => ({

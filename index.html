@@ -120,7 +120,10 @@
           <p class="eyebrow">Garage &amp; Shop</p>
           <h2>Spend your coins</h2>
         </div>
-        <span class="coins big" id="shop-coins"></span>
+        <div class="shop-wallet">
+          <span class="coins big" id="shop-coins"></span>
+          <button class="btn primary small" id="btn-buy" hidden>Buy coins</button>
+        </div>
       </header>
       <div class="tabs" role="tablist" id="shop-tabs"></div>
       <div class="grid" id="shop-grid"></div>
@@ -168,6 +171,17 @@
         <input id="on-server" class="input" spellcheck="false">
       </details>
       <div class="row"><button class="btn ghost" id="on-back">Back</button></div>
+    </div>
+  </section>
+
+  <section id="buy" class="overlay" hidden>
+    <div class="panel">
+      <p class="eyebrow">Garage &amp; Shop</p>
+      <h2>Buy coins</h2>
+      <div class="packs" id="buy-packs"></div>
+      <p class="hint status" id="buy-status" role="status"></p>
+      <p class="hint">Payments are handled securely by Xsolla in your browser. Coins appear here a few moments after you pay.</p>
+      <div class="row"><button class="btn ghost" id="buy-close">Back to the shop</button></div>
     </div>
   </section>
 

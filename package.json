@@ -20,6 +20,7 @@
   "dependencies": {
     "@fontsource/chakra-petch": "^5.0.0",
     "@tauri-apps/api": "^2.12.3",
+    "@tauri-apps/plugin-opener": "^2.7.1",
     "ws": "^8.22.0"
   }
 }

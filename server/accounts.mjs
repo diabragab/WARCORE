@@ -44,6 +44,7 @@ function cleanProfile(p) {
     owned,
     equipped: { tank: id(e.tank, 'patton'), paint: id(e.paint, 'olive'), decal: id(e.decal, 'none'), trail: id(e.trail, 'smoke') },
     stats: { played: int(st.played, 1e9), wins: int(st.wins, 1e9), arcadeBest: int(st.arcadeBest, 1e6) },
+    paidSeen: int(p.paidSeen, 1e12),
   };
 }
 
@@ -68,7 +69,8 @@ function tooMany(ip) {
   return a.length > 10;
 }
 
-function readBody(req) {
+/** Raw request body as text (the payment webhook signs the exact bytes). */
+export function readRaw(req) {
   return new Promise((resolve, reject) => {
     let size = 0;
     const chunks = [];
@@ -80,26 +82,53 @@ function readBody(req) {
       } else chunks.push(c);
     });
     req.on('end', () => {
-      try {
-        resolve(chunks.length ? JSON.parse(Buffer.concat(chunks).toString('utf8')) : {});
-      } catch {
-        reject(new Error('bad json'));
-      }
+      resolve(Buffer.concat(chunks).toString('utf8'));
     });
     req.on('error', reject);
   });
 }
 
-function json(res, status, body) {
+export async function readBody(req) {
+  const raw = await readRaw(req);
+  try {
+    return raw ? JSON.parse(raw) : {};
+  } catch {
+    throw new Error('bad json');
+  }
+}
+
+export function json(res, status, body) {
   res.writeHead(status, { 'content-type': 'application/json', 'cache-control': 'no-store' });
   res.end(JSON.stringify(body));
 }
 
-function userFor(req) {
+export function userFor(req) {
   const m = /^Bearer ([a-f0-9]{48})$/.exec(req.headers.authorization || '');
   const key = m && db.tokens[m[1]];
   return key ? { key, token: m[1], user: db.users[key] } : null;
 }
+
+export const userByKey = (key) => db.users[String(key).toLowerCase()] || null;
+
+/**
+ * Adds bought coins (or removes them, for a refund) once per payment transaction.
+ * Paid coins are tracked separately (paidTotal) so a game client saving an older copy of its
+ * profile can't wipe them: see the profile PUT below.
+ */
+export function creditCoins(key, amount, txId) {
+  const u = userByKey(key);
+  if (!u) return false;
+  u.payments ||= {};
+  if (u.payments[txId] !== undefined) return true;
+  u.payments[txId] = amount;
+  u.paidTotal = (u.paidTotal || 0) + amount;
+  u.profile.coins = Math.max(0, u.profile.coins + amount);
+  persist();
+  return true;
+}
+
+/** The stored profile, with paidSeen telling the client which purchases it already includes. */
+const outProfile = (u) => ({ ...u.profile, paidSeen: u.paidTotal || 0 });
 
 /** Handles /api/account/*. Returns false for other paths. */
 export async function handleAccounts(req, res, path) {
@@ -131,22 +160,27 @@ export async function handleAccounts(req, res, path) {
       if (password.length < 6 || password.length > 128) return json(res, 400, { error: 'Use a password of at least 6 characters.' }), true;
       if (db.users[key]) return json(res, 409, { error: 'That name is taken.' }), true;
       const salt = randomBytes(16).toString('hex');
-      db.users[key] = { name, salt, hash: await hashPassword(password, salt), profile: cleanProfile(body.profile), created: Date.now() };
-      return json(res, 200, { name, token: issueToken(key), profile: db.users[key].profile }), true;
+      db.users[key] = { name, salt, hash: await hashPassword(password, salt), profile: { ...cleanProfile(body.profile), paidSeen: 0 }, paidTotal: 0, created: Date.now() };
+      return json(res, 200, { name, token: issueToken(key), profile: outProfile(db.users[key]) }), true;
     }
     const u = db.users[key];
     const ok = u && timingSafeEqual(Buffer.from(await hashPassword(password, u.salt), 'hex'), Buffer.from(u.hash, 'hex'));
     if (!ok) return json(res, 401, { error: 'Wrong name or password.' }), true;
-    return json(res, 200, { name: u.name, token: issueToken(key), profile: u.profile }), true;
+    return json(res, 200, { name: u.name, token: issueToken(key), profile: outProfile(u) }), true;
   }
 
   const who = userFor(req);
   if (!who || !who.user) return json(res, 401, { error: 'Please sign in again.' }), true;
-  if (action === 'profile' && req.method === 'GET') return json(res, 200, { name: who.user.name, profile: who.user.profile }), true;
+  if (action === 'profile' && req.method === 'GET') return json(res, 200, { name: who.user.name, profile: outProfile(who.user) }), true;
   if (action === 'profile' && req.method === 'PUT') {
-    who.user.profile = cleanProfile(body.profile);
+    const p = cleanProfile(body.profile);
+    // Add any coins bought since this copy of the profile was loaded.
+    const paid = who.user.paidTotal || 0;
+    p.coins = Math.max(0, p.coins + paid - Math.min(p.paidSeen, paid));
+    p.paidSeen = paid;
+    who.user.profile = p;
     persist();
-    return json(res, 200, { ok: true }), true;
+    return json(res, 200, { profile: outProfile(who.user) }), true;
   }
   if (action === 'logout' && req.method === 'POST') {
     delete db.tokens[who.token];

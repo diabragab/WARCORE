@@ -6,6 +6,7 @@ import { extname, join, normalize } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { WebSocketServer } from 'ws';
 import { handleAccounts } from './accounts.mjs';
+import { handlePayments } from './payments.mjs';
 
 const PORT = Number(process.env.PORT) || 8787;
 const DIST = fileURLToPath(new URL('../dist/', import.meta.url));
@@ -16,7 +17,8 @@ const http = createServer(async (req, res) => {
   if (req.url === '/health') return res.end('ok');
   if (req.url?.startsWith('/api/')) {
     try {
-      if (await handleAccounts(req, res, req.url.split('?')[0])) return;
+      const p = req.url.split('?')[0];
+      if ((await handlePayments(req, res, p)) || (await handleAccounts(req, res, p))) return;
     } catch (e) {
       console.error(e);
       if (!res.headersSent) res.writeHead(500).end();

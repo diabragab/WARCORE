@@ -61,7 +61,7 @@ function startDemo() {
 
 // ------------------------------------------------------------------ screens
 
-const screens = ['menu', 'setup', 'shop', 'online', 'settings', 'account', 'pause', 'result'] as const;
+const screens = ['menu', 'setup', 'shop', 'online', 'settings', 'account', 'buy', 'pause', 'result'] as const;
 type Screen = (typeof screens)[number] | 'none';
 /** Players need an account to play (except in the offline preview page, which can't reach the server). */
 const mustSignIn = () => account.accountsAvailable() && !account.session;
@@ -183,6 +183,16 @@ function useProfile(p: Profile) {
   profile = normalize(p);
   saveProfile(profile, false);
 }
+
+// A save can come back with coins bought on the website or in another window.
+account.setOnServerProfile((p) => {
+  if ((p.paidSeen ?? 0) === (profile.paidSeen ?? 0)) return;
+  profile.coins = p.coins;
+  profile.paidSeen = p.paidSeen;
+  saveProfile(profile, false);
+  if (!$('#shop').hidden) renderShop();
+  if (!$('#menu').hidden) renderMenu();
+});
 
 $('#btn-account').onclick = () => {
   renderAccount();
@@ -676,7 +686,79 @@ function equip(id: string) {
 function openShop() {
   renderShop();
   show('shop');
+  account.getPayConfig().then((c) => ($('#btn-buy').hidden = !c));
 }
+
+// ------------------------------------------------------------------ buying coins (Xsolla)
+
+let watchTimer: ReturnType<typeof setInterval> | undefined;
+
+/** After a checkout opens, check the account for the new coins for a few minutes. */
+function watchForCoins() {
+  clearInterval(watchTimer);
+  const seen = profile.paidSeen ?? 0;
+  let tries = 0;
+  watchTimer = setInterval(async () => {
+    if (++tries > 60) return clearInterval(watchTimer);
+    const p = await account.fetchProfile().catch(() => null);
+    if (p && (p.paidSeen ?? 0) !== seen) {
+      clearInterval(watchTimer);
+      const added = p.coins - profile.coins;
+      useProfile(p);
+      sfx.coin();
+      $('#buy-status').textContent = added > 0 ? `${added.toLocaleString('en-US')} coins added. Thank you!` : 'Your purchase was updated.';
+      renderShop();
+    }
+  }, 5000);
+}
+
+async function openBuy() {
+  const c = await account.getPayConfig();
+  if (!c) return;
+  const fmt = new Intl.NumberFormat('en-US', { style: 'currency', currency: c.currency });
+  $('#buy-packs').replaceChildren(
+    ...c.packs.map((pk) => {
+      const b = document.createElement('button');
+      b.className = 'pack';
+      const amount = document.createElement('span');
+      amount.className = 'amount';
+      amount.textContent = `${pk.coins.toLocaleString('en-US')} coins`;
+      const name = document.createElement('span');
+      name.textContent = pk.name;
+      const note = document.createElement('span');
+      note.className = 'note';
+      note.textContent = pk.note ?? '';
+      const price = document.createElement('span');
+      price.className = 'price';
+      price.textContent = fmt.format(pk.price);
+      b.append(amount, name, note, price);
+      b.onclick = async () => {
+        b.disabled = true;
+        $('#buy-status').classList.remove('error');
+        $('#buy-status').textContent = 'Opening the secure payment page…';
+        try {
+          await account.buyPack(pk.id);
+          $('#buy-status').textContent = 'Finish paying in the page that opened. Your coins will appear here automatically.';
+          watchForCoins();
+        } catch (e) {
+          $('#buy-status').textContent = (e as Error).message;
+          $('#buy-status').classList.add('error');
+        } finally {
+          b.disabled = false;
+        }
+      };
+      return b;
+    }),
+  );
+  $('#buy-status').textContent = c.sandbox ? 'Test mode: no real money is charged.' : '';
+  show('buy');
+}
+
+$('#btn-buy').onclick = openBuy;
+$('#buy-close').onclick = () => {
+  renderShop();
+  show('shop');
+};
 
 // ------------------------------------------------------------------ input
 
