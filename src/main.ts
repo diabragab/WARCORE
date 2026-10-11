@@ -315,11 +315,18 @@ interface ShopItem { id: string; name: string; desc: string; stats?: string; pri
 function previewTank(c: HTMLCanvasElement, modelId: string, look: Look) {
   const g = c.getContext('2d')!;
   g.setTransform(c.width / 200, 0, 0, c.width / 200, 0, 0);
-  g.fillStyle = '#5f6f3a';
-  g.fillRect(0, 78, 200, 22);
+  const sky = g.createRadialGradient(100, 70, 5, 100, 70, 130);
+  sky.addColorStop(0, '#4a2a22');
+  sky.addColorStop(1, '#121214');
+  g.fillStyle = sky;
+  g.fillRect(0, 0, 200, 100);
+  g.fillStyle = '#2b2522';
+  g.fillRect(0, 82, 200, 18);
+  g.fillStyle = '#4a3e36';
+  g.fillRect(0, 82, 200, 2);
   g.save();
   g.translate(96, 82);
-  g.scale(1.9, 1.9);
+  g.scale(1.5, 1.5);
   drawTank(g, modelById(modelId), look, 0, 0, 0, 35, 1);
   g.restore();
 }

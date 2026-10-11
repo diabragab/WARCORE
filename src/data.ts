@@ -45,11 +45,14 @@ export interface TankModel {
   geo: TankGeo;
 }
 
+/** Tank art is drawn at 1.3x the original sizes; hitboxes follow the art. */
+const geo = (g: TankGeo): TankGeo => Object.fromEntries(Object.entries(g).map(([k, v]) => [k, v * 1.3])) as unknown as TankGeo;
+
 export const MODELS: TankModel[] = [
-  { id: 'patton', name: 'Patton', desc: 'All-rounder. Does everything fine.', price: 0, hp: 100, fuel: 110, powerMul: 1, armor: 1, geo: { bodyW: 34, bodyH: 10, treadH: 8, turretR: 9, barrelL: 22, barrelW: 4, topInset: 6 } },
-  { id: 'jackal', name: 'Jackal', desc: 'Light scout. Drives far, breaks easily.', price: 300, hp: 80, fuel: 200, powerMul: 1, armor: 1, geo: { bodyW: 30, bodyH: 8, treadH: 7, turretR: 7, barrelL: 19, barrelW: 3, topInset: 9 } },
-  { id: 'longbow', name: 'Longbow', desc: 'Artillery barrel with extra range.', price: 450, hp: 90, fuel: 90, powerMul: 1.15, armor: 1, geo: { bodyW: 34, bodyH: 9, treadH: 8, turretR: 8, barrelL: 32, barrelW: 3, topInset: 6 } },
-  { id: 'bastion', name: 'Bastion', desc: 'Heavy armour, slow tracks.', price: 600, hp: 140, fuel: 60, powerMul: 0.95, armor: 0.85, geo: { bodyW: 42, bodyH: 12, treadH: 9, turretR: 11, barrelL: 23, barrelW: 5, topInset: 5 } },
+  { id: 'patton', name: 'Patton', desc: 'All-rounder. Does everything fine.', price: 0, hp: 100, fuel: 110, powerMul: 1, armor: 1, geo: geo({ bodyW: 34, bodyH: 10, treadH: 8, turretR: 9, barrelL: 22, barrelW: 4, topInset: 6 }) },
+  { id: 'jackal', name: 'Jackal', desc: 'Light scout. Drives far, breaks easily.', price: 300, hp: 80, fuel: 200, powerMul: 1, armor: 1, geo: geo({ bodyW: 30, bodyH: 8, treadH: 7, turretR: 7, barrelL: 19, barrelW: 3, topInset: 9 }) },
+  { id: 'longbow', name: 'Longbow', desc: 'Artillery barrel with extra range.', price: 450, hp: 90, fuel: 90, powerMul: 1.15, armor: 1, geo: geo({ bodyW: 34, bodyH: 9, treadH: 8, turretR: 8, barrelL: 32, barrelW: 3, topInset: 6 }) },
+  { id: 'bastion', name: 'Bastion', desc: 'Heavy armour, slow tracks.', price: 600, hp: 140, fuel: 60, powerMul: 0.95, armor: 0.85, geo: geo({ bodyW: 42, bodyH: 12, treadH: 9, turretR: 11, barrelL: 23, barrelW: 5, topInset: 5 }) },
 ];
 
 export interface Cosmetic { id: string; name: string; price: number; value: string }

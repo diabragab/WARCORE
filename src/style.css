@@ -147,7 +147,7 @@ h2 { margin: 0; font-family: var(--display); font-weight: 700; font-size: 32px; 
 .tab[aria-selected='true'] { color: var(--text); border-bottom-color: var(--signal); }
 .grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(200px, 1fr)); gap: 12px; }
 .card { background: rgba(255, 255, 255, 0.04); border: 1px solid var(--line); display: flex; flex-direction: column; min-width: 0; }
-.card canvas { width: 100%; aspect-ratio: 2 / 1; display: block; background: linear-gradient(#2c4566, #8a6f63); }
+.card canvas { width: 100%; aspect-ratio: 2 / 1; display: block; background: #121214; }
 .card .body { padding: 12px 14px 14px; display: flex; flex-direction: column; gap: 6px; flex: 1; }
 .card h3 { margin: 0; font-size: 17px; font-weight: 700; }
 .card p { margin: 0; font-size: 13px; line-height: 1.4; color: var(--muted); flex: 1; }

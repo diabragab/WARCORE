@@ -1,6 +1,6 @@
 import { Terrain, THEMES, W, H, WATER, type Theme } from './terrain';
 import { BOMBLET, modelById, weaponById, type Look, type TankModel, type Weapon } from './data';
-import { D2R, drawTank, pivotHeight, roundRect, trailColor } from './draw';
+import { D2R, drawTank, pivotHeight, roundRect, shade, trailColor } from './draw';
 import { mulberry32 } from './rng';
 import { sfx } from './sfx';
 
@@ -81,6 +81,7 @@ interface Tank {
   wi: number;
   damage: number;
   recoil: number;
+  trackPhase: number;
 }
 
 interface Body {
@@ -110,8 +111,10 @@ interface Particle {
   max: number;
   size: number;
   color: string;
-  kind: 'spark' | 'smoke' | 'debris' | 'text' | 'ring' | 'flash' | 'drop';
+  kind: 'spark' | 'smoke' | 'debris' | 'text' | 'ring' | 'flash' | 'drop' | 'fire' | 'chunk' | 'flake';
   grav: number;
+  rot?: number;
+  spin?: number;
   text?: string;
 }
 
@@ -143,6 +146,9 @@ export class Game {
   shake = 0;
   banner = 0;
   paused = false;
+  private flashT = 0;
+  private cloudSprite = cloudSprite();
+  private vignette: HTMLCanvasElement | null = null;
   keys = { left: false, right: false, up: false, down: false, fire: false };
   private rnd: () => number;
   private bg: HTMLCanvasElement;
@@ -194,7 +200,7 @@ export class Game {
         x, y, vx: 0, vy: 0, grounded: false, tilt: 0,
         hp: model.hp, maxHp: model.hp, hpShown: model.hp, alive: true, drowned: false,
         elev: 45, facing: x < W / 2 ? 1 : -1, power: 0, lastPower: -1, charging: false,
-        fuel: model.fuel, moveAcc: 0, arsenal, wi: 0, damage: 0, recoil: 0,
+        fuel: model.fuel, moveAcc: 0, arsenal, wi: 0, damage: 0, recoil: 0, trackPhase: 0,
       });
     });
   }
@@ -375,6 +381,11 @@ export class Game {
         age: 0, owner: t, w, bounces: w.bounces ?? 0, trail: [], look: t.look,
       });
       if (s === 0) {
+        for (let i = 0; i < 5; i++)
+          this.particles.push({
+            x: bx, y: by, vx: Math.cos(a) * (80 + i * 40), vy: -Math.sin(a) * (80 + i * 40), life: 0.15, max: 0.15,
+            size: 9 - i, color: '', kind: 'fire', grav: 0,
+          });
         for (let i = 0; i < 10; i++)
           this.particles.push({
             x: bx, y: by, vx: Math.cos(a) * 60 + (this.rnd() - 0.5) * 60, vy: -Math.sin(a) * 60 + (this.rnd() - 0.5) * 60,
@@ -398,6 +409,8 @@ export class Game {
     if (this.paused) return;
     this.time += dt;
     this.shake = Math.max(0, this.shake - dt * 30);
+    this.flashT = Math.max(0, this.flashT - dt * 4);
+    this.ambient(dt);
     this.banner = Math.max(0, this.banner - dt);
     for (const c of this.clouds) {
       c.x += (this.wind * 0.35 + 4) * dt * c.s;
@@ -499,6 +512,7 @@ export class Game {
       t.x = nx;
       t.y = ny;
       t.fuel -= 1;
+      t.trackPhase += 1;
     }
   }
 
@@ -780,23 +794,44 @@ export class Game {
         t.y -= 1;
       }
     }
-    this.particles.push({ x, y, vx: 0, vy: 0, life: 0.25, max: 0.25, size: r * 1.5, color: '#fff3c4', kind: 'flash', grav: 0 });
-    this.particles.push({ x, y, vx: 0, vy: 0, life: 0.45, max: 0.45, size: r * 1.3, color: '#fff', kind: 'ring', grav: 0 });
-    const n = 14 + r * 0.6;
+    const R = () => this.rnd();
+    this.particles.push({ x, y, vx: 0, vy: 0, life: 0.3, max: 0.3, size: r * 2.2, color: '#fff3c4', kind: 'flash', grav: 0 });
+    this.particles.push({ x, y, vx: 0, vy: 0, life: 0.5, max: 0.5, size: r * 1.8, color: '#ffe2b0', kind: 'ring', grav: 0 });
+    // Fireball: overlapping hot puffs that rise and cool into smoke.
+    for (let i = 0; i < 8 + r / 5; i++) {
+      const a = R() * Math.PI * 2, sp = R() * r * 2.2;
+      this.particles.push({
+        x: x + Math.cos(a) * r * 0.2, y: y + Math.sin(a) * r * 0.2, vx: Math.cos(a) * sp, vy: Math.sin(a) * sp - 40,
+        life: 0.45 + R() * 0.4, max: 0.85, size: r * (0.35 + R() * 0.35), color: '', kind: 'fire', grav: -60,
+      });
+    }
+    const n = 14 + r * 0.7;
     for (let i = 0; i < n; i++) {
-      const a = this.rnd() * Math.PI * 2, s = 80 + this.rnd() * r * 7;
+      const a = R() * Math.PI * 2, sp = 90 + R() * r * 8;
       this.particles.push({
-        x, y, vx: Math.cos(a) * s, vy: Math.sin(a) * s - 60, life: 0.4 + this.rnd() * 0.5, max: 0.9, size: 2 + this.rnd() * 2,
-        color: this.rnd() < 0.5 ? '#ffd166' : '#ff7b39', kind: 'spark', grav: 260,
+        x, y, vx: Math.cos(a) * sp, vy: Math.sin(a) * sp - 80, life: 0.5 + R() * 0.7, max: 1.2, size: 1.5 + R() * 2,
+        color: R() < 0.5 ? '#ffd166' : '#ff8a3a', kind: 'spark', grav: 320,
       });
     }
-    for (let i = 0; i < n * 0.5; i++) this.debris(x, y, 140 + r * 3);
-    for (let i = 0; i < 6 + r / 8; i++) {
+    // Rotating chunks of ground
+    const [dr, dg, db] = this.theme.dirt;
+    for (let i = 0; i < 6 + r / 4; i++) {
+      const a = -Math.PI * (0.1 + R() * 0.8), sp = 120 + R() * r * 6;
+      const k = 0.6 + R() * 0.6;
       this.particles.push({
-        x: x + (this.rnd() - 0.5) * r, y: y + (this.rnd() - 0.5) * r * 0.6, vx: (this.rnd() - 0.5) * 30, vy: -20 - this.rnd() * 30,
-        life: 1.2 + this.rnd(), max: 2.2, size: r * (0.35 + this.rnd() * 0.35), color: '#4b4540', kind: 'smoke', grav: -6,
+        x, y, vx: Math.cos(a) * sp, vy: Math.sin(a) * sp, life: 1 + R() * 0.8, max: 1.8, size: 3 + R() * 5,
+        color: `rgb(${dr * k},${dg * k},${db * k})`, kind: 'chunk', grav: 600, rot: R() * 6, spin: (R() - 0.5) * 14,
       });
     }
+    for (let i = 0; i < n * 0.4; i++) this.debris(x, y, 140 + r * 3);
+    // Lingering smoke column
+    for (let i = 0; i < 8 + r / 6; i++) {
+      this.particles.push({
+        x: x + (R() - 0.5) * r, y: y + (R() - 0.5) * r * 0.5, vx: (R() - 0.5) * 30, vy: -25 - R() * 45,
+        life: 2 + R() * 2.2, max: 4.2, size: r * (0.4 + R() * 0.4), color: this.theme.warzone ? '#2a2422' : '#4b4540', kind: 'smoke', grav: -8,
+      });
+    }
+    this.flashT = Math.min(1, 0.3 + r / 90);
     this.shake = Math.min(20, 3 + r / 5);
     this.snd(() => sfx.boom(r));
   }
@@ -934,28 +969,29 @@ export class Game {
 
     ctx.drawImage(this.bg, 0, 0);
     this.drawClouds(ctx);
-    ctx.drawImage(this.terrain.canvas, 0, 0);
+    ctx.drawImage(this.terrain.image, 0, 0);
 
     for (const t of this.tanks) if (!t.alive && !t.drowned) this.drawWreck(ctx, t);
-    for (const t of this.tanks) if (t.alive) drawTank(ctx, t.model, t.look, t.x, t.y, t.tilt, t.elev, t.facing, t.recoil);
+    for (const t of this.tanks) if (t.alive) drawTank(ctx, t.model, t.look, t.x, t.y, t.tilt, t.elev, t.facing, t.recoil, t.trackPhase);
     if (this.phase === 'aim' && !this.opts.demo) this.drawAimGuide(ctx, this.current);
     this.drawProjectiles(ctx);
     this.drawParticles(ctx);
     this.drawWater(ctx);
+    this.drawGrade(ctx);
     for (const t of this.tanks) if (t.alive) this.drawTankLabel(ctx, t);
     ctx.restore();
     if (!this.opts.demo) this.drawHud(ctx);
   }
 
   private drawClouds(ctx: CanvasRenderingContext2D) {
-    ctx.fillStyle = this.theme.warzone ? 'rgba(30,22,22,0.55)' : 'rgba(255,255,255,0.22)';
+    ctx.save();
+    ctx.globalAlpha = this.theme.warzone ? 0.7 : 0.55;
+    if (this.theme.warzone) ctx.filter = 'brightness(0.25) sepia(0.6)';
     for (const c of this.clouds) {
-      for (const [dx, dy, r] of [[0, 0, 34], [32, 6, 26], [-30, 8, 24], [12, -14, 26]]) {
-        ctx.beginPath();
-        ctx.arc(c.x + dx * c.s, c.y + dy * c.s, r * c.s, 0, Math.PI * 2);
-        ctx.fill();
-      }
+      const w = 260 * c.s, h = 110 * c.s;
+      ctx.drawImage(this.cloudSprite, c.x - w / 2, c.y - h / 2, w, h);
     }
+    ctx.restore();
   }
 
   private drawWreck(ctx: CanvasRenderingContext2D, t: Tank) {
@@ -963,9 +999,13 @@ export class Game {
     ctx.globalAlpha = 0.85;
     drawTank(ctx, t.model, { ...t.look, paint: '#3a3633', decal: 'none' }, t.x, t.y, t.tilt + 0.15, -10, t.facing);
     ctx.restore();
-    if (Math.random() < 0.08)
+    if (Math.random() < 0.12)
       this.particles.push({
-        x: t.x + (Math.random() - 0.5) * 10, y: t.y - 14, vx: 0, vy: -25, life: 1.6, max: 1.6, size: 8, color: '#55504b', kind: 'smoke', grav: -4,
+        x: t.x + (Math.random() - 0.5) * 12, y: t.y - 16, vx: 0, vy: -25, life: 2.2, max: 2.2, size: 10, color: '#3d3833', kind: 'smoke', grav: -6,
+      });
+    if (Math.random() < 0.25)
+      this.particles.push({
+        x: t.x + (Math.random() - 0.5) * 14, y: t.y - 12, vx: (Math.random() - 0.5) * 10, vy: -30, life: 0.5, max: 0.5, size: 5 + Math.random() * 4, color: '', kind: 'fire', grav: -40,
       });
   }
 
@@ -998,55 +1038,78 @@ export class Game {
 
   private drawProjectiles(ctx: CanvasRenderingContext2D) {
     for (const p of this.projectiles) {
+      ctx.save();
+      if (p.look.trail !== 'smoke') ctx.globalCompositeOperation = 'lighter';
       p.trail.forEach((pt, i) => {
         const al = 1 - i / p.trail.length;
-        ctx.fillStyle = trailColor(p.look.trail, i, this.time, al * 0.85);
+        ctx.fillStyle = trailColor(p.look.trail, i, this.time, al * (p.look.trail === 'smoke' ? 0.5 : 0.7));
         ctx.beginPath();
-        ctx.arc(pt.x, pt.y, Math.max(0.8, p.w.size * 0.75 * al + (p.look.trail === 'smoke' ? i * 0.15 : 0)), 0, Math.PI * 2);
+        ctx.arc(pt.x, pt.y, Math.max(0.8, p.w.size * 0.8 * al + (p.look.trail === 'smoke' ? i * 0.22 : 0)), 0, Math.PI * 2);
         ctx.fill();
       });
+      ctx.restore();
       if (p.look.trail === 'sparkle' && Math.random() < 0.5)
         this.particles.push({ x: p.x, y: p.y, vx: (Math.random() - 0.5) * 40, vy: (Math.random() - 0.5) * 40, life: 0.5, max: 0.5, size: 2, color: '#fff3a0', kind: 'spark', grav: 0 });
-      ctx.fillStyle = p.w.color;
-      ctx.strokeStyle = 'rgba(255,255,255,0.6)';
-      ctx.lineWidth = 1;
+      // hot glow
+      ctx.save();
+      ctx.globalCompositeOperation = 'lighter';
+      const glow = ctx.createRadialGradient(p.x, p.y, 0, p.x, p.y, p.w.size * 4);
+      glow.addColorStop(0, 'rgba(255,190,110,0.55)');
+      glow.addColorStop(1, 'rgba(255,120,40,0)');
+      ctx.fillStyle = glow;
+      ctx.fillRect(p.x - p.w.size * 4, p.y - p.w.size * 4, p.w.size * 8, p.w.size * 8);
+      ctx.restore();
+      // shell body pointing along its flight
+      ctx.save();
+      ctx.translate(p.x, p.y);
+      ctx.rotate(Math.atan2(p.vy, p.vx));
+      const L = p.w.size * 2.2, R2 = p.w.size * 0.85;
+      const bodyG = ctx.createLinearGradient(0, -R2, 0, R2);
+      bodyG.addColorStop(0, shade(p.w.color, 0.5));
+      bodyG.addColorStop(1, shade(p.w.color, -0.4));
+      ctx.fillStyle = bodyG;
       ctx.beginPath();
-      ctx.arc(p.x, p.y, p.w.size, 0, Math.PI * 2);
+      ctx.moveTo(L * 0.6, 0);
+      ctx.quadraticCurveTo(L * 0.3, -R2, -L * 0.2, -R2);
+      ctx.lineTo(-L * 0.5, -R2);
+      ctx.lineTo(-L * 0.5, R2);
+      ctx.lineTo(-L * 0.2, R2);
+      ctx.quadraticCurveTo(L * 0.3, R2, L * 0.6, 0);
       ctx.fill();
-      ctx.stroke();
+      ctx.fillStyle = '#c9a227';
+      ctx.fillRect(-L * 0.3, -R2, 1.5, R2 * 2);
+      ctx.restore();
     }
   }
 
   private drawParticles(ctx: CanvasRenderingContext2D) {
+    // Normal-blended pass: smoke, debris, text
     for (const p of this.particles) {
       const a = Math.max(0, p.life / p.max);
       switch (p.kind) {
-        case 'smoke':
-          ctx.fillStyle = p.color;
-          ctx.globalAlpha = a * 0.45;
-          ctx.beginPath();
-          ctx.arc(p.x, p.y, p.size * (1.6 - a * 0.6), 0, Math.PI * 2);
-          ctx.fill();
-          break;
-        case 'flash': {
-          const g = ctx.createRadialGradient(p.x, p.y, 0, p.x, p.y, p.size);
-          g.addColorStop(0, `rgba(255,250,220,${a})`);
-          g.addColorStop(0.4, `rgba(255,190,80,${a * 0.8})`);
-          g.addColorStop(1, 'rgba(255,120,40,0)');
+        case 'smoke': {
+          const r = p.size * (1.7 - a * 0.7);
+          const g = ctx.createRadialGradient(p.x, p.y, 0, p.x, p.y, r);
+          g.addColorStop(0, p.color);
+          g.addColorStop(1, 'rgba(0,0,0,0)');
+          ctx.globalAlpha = Math.min(1, a * 1.4) * 0.55;
           ctx.fillStyle = g;
-          ctx.globalAlpha = 1;
-          ctx.beginPath();
-          ctx.arc(p.x, p.y, p.size, 0, Math.PI * 2);
-          ctx.fill();
+          ctx.fillRect(p.x - r, p.y - r, r * 2, r * 2);
           break;
         }
-        case 'ring':
-          ctx.strokeStyle = p.color;
-          ctx.globalAlpha = a * 0.7;
-          ctx.lineWidth = 3 * a;
+        case 'chunk':
+          ctx.globalAlpha = Math.min(1, a * 2);
+          ctx.fillStyle = p.color;
+          ctx.save();
+          ctx.translate(p.x, p.y);
+          ctx.rotate((p.rot ?? 0) + this.time * (p.spin ?? 0));
           ctx.beginPath();
-          ctx.arc(p.x, p.y, p.size * (1 - a) + 4, 0, Math.PI * 2);
-          ctx.stroke();
+          ctx.moveTo(-p.size / 2, -p.size / 3);
+          ctx.lineTo(p.size / 3, -p.size / 2);
+          ctx.lineTo(p.size / 2, p.size / 4);
+          ctx.lineTo(-p.size / 4, p.size / 2);
+          ctx.fill();
+          ctx.restore();
           break;
         case 'text':
           ctx.globalAlpha = Math.min(1, a * 2);
@@ -1058,32 +1121,144 @@ export class Game {
           ctx.fillStyle = p.color;
           ctx.fillText(p.text!, p.x, p.y);
           break;
-        default:
+        case 'debris':
+        case 'drop':
+        case 'flake':
           ctx.globalAlpha = Math.min(1, a * 1.5);
           ctx.fillStyle = p.color;
           ctx.fillRect(p.x - p.size / 2, p.y - p.size / 2, p.size, p.size);
+          break;
       }
     }
+    // Additive pass: fire, flashes, sparks
+    ctx.save();
+    ctx.globalCompositeOperation = 'lighter';
+    for (const p of this.particles) {
+      const a = Math.max(0, p.life / p.max);
+      switch (p.kind) {
+        case 'fire': {
+          const r = p.size * (1.3 - a * 0.3);
+          const g = ctx.createRadialGradient(p.x, p.y, 0, p.x, p.y, r);
+          g.addColorStop(0, `rgba(255,240,200,${a})`);
+          g.addColorStop(0.35, `rgba(255,150,50,${a * 0.85})`);
+          g.addColorStop(1, 'rgba(200,40,10,0)');
+          ctx.globalAlpha = 1;
+          ctx.fillStyle = g;
+          ctx.fillRect(p.x - r, p.y - r, r * 2, r * 2);
+          break;
+        }
+        case 'flash': {
+          const g = ctx.createRadialGradient(p.x, p.y, 0, p.x, p.y, p.size);
+          g.addColorStop(0, `rgba(255,250,220,${a})`);
+          g.addColorStop(0.3, `rgba(255,190,80,${a * 0.7})`);
+          g.addColorStop(1, 'rgba(255,120,40,0)');
+          ctx.globalAlpha = 1;
+          ctx.fillStyle = g;
+          ctx.fillRect(p.x - p.size, p.y - p.size, p.size * 2, p.size * 2);
+          break;
+        }
+        case 'ring':
+          ctx.strokeStyle = p.color;
+          ctx.globalAlpha = a * 0.6;
+          ctx.lineWidth = 4 * a;
+          ctx.beginPath();
+          ctx.arc(p.x, p.y, p.size * (1 - a) + 4, 0, Math.PI * 2);
+          ctx.stroke();
+          break;
+        case 'spark': {
+          ctx.globalAlpha = Math.min(1, a * 1.6);
+          ctx.strokeStyle = p.color;
+          ctx.lineWidth = p.size;
+          ctx.beginPath();
+          ctx.moveTo(p.x, p.y);
+          ctx.lineTo(p.x - p.vx * 0.025, p.y - p.vy * 0.025);
+          ctx.stroke();
+          break;
+        }
+      }
+    }
+    ctx.restore();
     ctx.globalAlpha = 1;
+  }
+
+  /** Weather and ambience for each map. */
+  private ambient(dt: number) {
+    const t = this.theme;
+    const spawn = (rate: number, make: () => Particle) => {
+      if (Math.random() < dt * rate) this.particles.push(make());
+    };
+    if (t.name === 'Tundra')
+      spawn(40, () => ({ x: Math.random() * (W + 200) - 100, y: -10, vx: 0, vy: 30 + Math.random() * 30, life: 30, max: 30, size: 1.5 + Math.random() * 2, color: 'rgba(255,255,255,0.85)', kind: 'flake', grav: 0 }));
+    else if (t.name === 'Desert')
+      spawn(10, () => ({ x: Math.random() * W, y: H * 0.4 + Math.random() * H * 0.4, vx: 0, vy: -4, life: 6, max: 6, size: 1.5, color: 'rgba(240,210,160,0.6)', kind: 'flake', grav: 0 }));
+    for (const p of this.particles) if (p.kind === 'flake') {
+      p.vx += (this.wind * 0.6 - p.vx) * dt;
+      if (p.y > WATER || this.terrain.solid(p.x, p.y)) p.life = Math.min(p.life, 0.3);
+    }
   }
 
   private drawWater(ctx: CanvasRenderingContext2D) {
-    const layer = (off: number, amp: number, alpha: number, speed: number) => {
-      ctx.globalAlpha = alpha;
-      ctx.fillStyle = this.theme.water;
-      ctx.beginPath();
-      ctx.moveTo(0, H);
-      for (let x = 0; x <= W; x += 16) ctx.lineTo(x, WATER + off + Math.sin(x * 0.018 + this.time * speed) * amp);
-      ctx.lineTo(W, H);
-      ctx.fill();
-    };
-    layer(-4, 4, 0.55, 1.4);
-    layer(2, 3, 0.9, -1.9);
+    const base = this.theme.water;
+    const wave = (x: number, off: number, amp: number, speed: number) => WATER + off + Math.sin(x * 0.018 + this.time * speed) * amp + Math.sin(x * 0.047 - this.time * speed * 1.3) * amp * 0.4;
+    // back layer
+    ctx.globalAlpha = 0.5;
+    ctx.fillStyle = base;
+    ctx.beginPath();
+    ctx.moveTo(0, H);
+    for (let x = 0; x <= W; x += 12) ctx.lineTo(x, wave(x, -5, 4, 1.4));
+    ctx.lineTo(W, H);
+    ctx.fill();
+    // front layer with depth gradient
+    ctx.globalAlpha = 0.92;
+    const g = ctx.createLinearGradient(0, WATER, 0, H);
+    g.addColorStop(0, shade(base, 0.15));
+    g.addColorStop(1, shade(base, -0.6));
+    ctx.fillStyle = g;
+    ctx.beginPath();
+    ctx.moveTo(0, H);
+    for (let x = 0; x <= W; x += 12) ctx.lineTo(x, wave(x, 2, 3, -1.9));
+    ctx.lineTo(W, H);
+    ctx.fill();
+    // crest highlights
+    ctx.globalAlpha = 0.5;
+    ctx.strokeStyle = shade(base, 0.6);
+    ctx.lineWidth = 1.5;
+    ctx.beginPath();
+    for (let x = 0; x <= W; x += 12) {
+      const y = wave(x, 2, 3, -1.9);
+      if (x === 0) ctx.moveTo(x, y);
+      else ctx.lineTo(x, y);
+    }
+    ctx.stroke();
     ctx.globalAlpha = 1;
   }
 
+  /** Darkened corners plus a brief warm flash after big explosions. */
+  private drawGrade(ctx: CanvasRenderingContext2D) {
+    if (!this.vignette) {
+      const v = document.createElement('canvas');
+      v.width = W;
+      v.height = H;
+      const g = v.getContext('2d')!;
+      const grad = g.createRadialGradient(W / 2, H * 0.45, H * 0.35, W / 2, H * 0.5, W * 0.7);
+      grad.addColorStop(0, 'rgba(0,0,0,0)');
+      grad.addColorStop(1, this.theme.warzone ? 'rgba(20,4,2,0.6)' : 'rgba(0,0,0,0.42)');
+      g.fillStyle = grad;
+      g.fillRect(0, 0, W, H);
+      this.vignette = v;
+    }
+    ctx.drawImage(this.vignette, 0, 0);
+    if (this.flashT > 0) {
+      ctx.save();
+      ctx.globalCompositeOperation = 'lighter';
+      ctx.fillStyle = `rgba(255,150,70,${this.flashT * 0.18})`;
+      ctx.fillRect(0, 0, W, H);
+      ctx.restore();
+    }
+  }
+
   private drawTankLabel(ctx: CanvasRenderingContext2D, t: Tank) {
-    const y = t.y - 62;
+    const y = t.y - pivotHeight(t.model) - 38;
     ctx.font = '600 15px "Chakra Petch", system-ui, sans-serif';
     ctx.textAlign = 'center';
     ctx.lineWidth = 3.5;
@@ -1219,4 +1394,24 @@ export class Game {
       ctx.globalAlpha = 1;
     }
   }
+}
+
+/** Soft cloud puff drawn once and reused. */
+function cloudSprite(): HTMLCanvasElement {
+  const c = document.createElement('canvas');
+  c.width = 260;
+  c.height = 110;
+  const g = c.getContext('2d')!;
+  const puffs = [[130, 62, 46], [92, 70, 34], [170, 70, 36], [112, 48, 34], [150, 46, 30], [60, 78, 24], [204, 78, 24]];
+  for (const [x, y, r] of puffs) {
+    const rg = g.createRadialGradient(x, y - r * 0.3, r * 0.1, x, y, r);
+    rg.addColorStop(0, 'rgba(255,255,255,0.95)');
+    rg.addColorStop(0.6, 'rgba(235,238,245,0.7)');
+    rg.addColorStop(1, 'rgba(220,225,235,0)');
+    g.fillStyle = rg;
+    g.beginPath();
+    g.arc(x, y, r, 0, Math.PI * 2);
+    g.fill();
+  }
+  return c;
 }
