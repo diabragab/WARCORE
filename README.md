@@ -1,4 +1,4 @@
-# Tanks
+# WARCORE
 
 Worms-style turn-based artillery. Runs in the browser and as a desktop app (Tauri, no Electron).
 

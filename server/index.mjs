@@ -114,4 +114,4 @@ setInterval(() => {
   }
 }, 30_000);
 
-http.listen(PORT, () => console.log(`Tanks server on http://localhost:${PORT}`));
+http.listen(PORT, () => console.log(`WARCORE server on http://localhost:${PORT}`));

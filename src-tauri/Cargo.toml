@@ -1,5 +1,5 @@
 [package]
-name = "tanks"
+name = "warcore"
 version = "0.1.0"
 description = "Turn-based artillery tanks game"
 edition = "2021"

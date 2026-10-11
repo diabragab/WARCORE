@@ -15,4 +15,4 @@ fi
 cd /opt/tanks/deploy
 echo "DOMAIN=$DOMAIN" > .env
 docker compose up -d --build
-echo "Tanks is starting at https://$DOMAIN (the HTTPS certificate can take a minute)."
+echo "WARCORE is starting at https://$DOMAIN (the HTTPS certificate can take a minute)."
