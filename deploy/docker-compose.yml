@@ -1,14 +1,19 @@
-# Runs the game + match server behind Caddy, which gets a free HTTPS certificate for your domain.
-# Usage on the server:  DOMAIN=warcore.example.com docker compose up -d --build
-# Leave DOMAIN empty to serve plain HTTP on the server IP until a domain is ready.
+# Runs the game + match server.
+# - Own server (nothing else on ports 80/443): the "caddy" profile adds Caddy, which gets a free HTTPS
+#   certificate for DOMAIN. Leave DOMAIN empty to serve plain HTTP on the server IP.
+# - Shared server (an existing nginx/Apache already owns 80/443): run without the profile; the game listens on
+#   127.0.0.1:WARCORE_PORT and your web server proxies the domain to it. deploy/install.sh picks the mode for you.
 services:
   tanks:
     build: ..
     restart: unless-stopped
     environment:
       PORT: 8787
+    ports:
+      - "127.0.0.1:${WARCORE_PORT:-8787}:8787"
   caddy:
     image: caddy:2
+    profiles: ["caddy"]
     restart: unless-stopped
     ports:
       - "80:80"

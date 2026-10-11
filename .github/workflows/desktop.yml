@@ -29,7 +29,7 @@ jobs:
       - run: npx tauri build --bundles msi,nsis
         env:
           # Address of the deployed match server, e.g. wss://warcore.example.com
-          VITE_SERVER_URL: ${{ vars.WARCORE_SERVER_URL || 'wss://warcore.claudiumstudios.online' }}
+          VITE_SERVER_URL: ${{ vars.WARCORE_SERVER_URL || 'wss://war-core.online' }}
       - uses: actions/upload-artifact@v4
         with:
           name: WARCORE-windows

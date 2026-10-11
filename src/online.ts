@@ -90,7 +90,7 @@ export class Online {
     $('#on-wait').hidden = true;
     if (inPreview()) {
       this.view('idle');
-      this.status("This shared preview can't open network connections, so online matches work in the Windows app or on warcore.claudiumstudios.online.", true);
+      this.status("This shared preview can't open network connections, so online matches work in the Windows app or on war-core.online.", true);
     } else this.quick();
   }
 

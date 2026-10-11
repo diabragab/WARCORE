@@ -34,15 +34,21 @@ so one deploy hosts both.
 npm run build && npm run server   # http://localhost:8787, online play works between browsers on that address
 ```
 
-Deploy on your own server (Linux, ports 80 and 443 open). As root on the server:
+Deploy on your own Linux server (Ubuntu/Debian). Point the domain's DNS A record at the server, then as root:
 
 ```sh
-curl -fsSL https://raw.githubusercontent.com/diabragab/tanks/main/deploy/install.sh | sh
+curl -fsSL https://raw.githubusercontent.com/diabragab/tanks/main/deploy/install.sh | DOMAIN=war-core.online sh
 ```
 
-The game is then at `http://<server IP>`. Once a domain's A record points at the server, run it again with
-`DOMAIN=warcore.example.com` before `sh` to switch to HTTPS, and set the repo variable `WARCORE_SERVER_URL` to
-`wss://warcore.example.com` (the Windows build defaults to `wss://warcore.claudiumstudios.online`).
+The installer checks whether the server already hosts websites:
+
+- Nothing on ports 80/443: the game runs behind its own Caddy, which gets the HTTPS certificate.
+- nginx or Apache already on 80/443 (other sites or games on the same machine): the game listens on
+  `127.0.0.1:8787`, and the script adds one new site for the domain to your web server and gets a certificate
+  with certbot. Your other sites keep working. Use `WARCORE_PORT=<port>` if 8787 is taken.
+
+Run the same command again to update. The Windows build connects to `wss://war-core.online` unless the repo
+variable `WARCORE_SERVER_URL` says otherwise.
 
 That installs Docker if needed and runs the game behind Caddy, which handles HTTPS once a domain is set. To redeploy on every push to
 `main`, add repo secrets `DEPLOY_HOST`, `DEPLOY_USER` and `DEPLOY_SSH_KEY` (see `.github/workflows/deploy.yml`).
