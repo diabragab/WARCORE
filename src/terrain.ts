@@ -17,9 +17,12 @@ export interface Theme {
   dirt: RGB;
   dirt2: RGB;
   water: string;
+  /** Burning city silhouettes, smoke and embers instead of rolling hills. */
+  warzone?: boolean;
 }
 
 export const THEMES: Record<string, Theme> = {
+  warzone: { name: 'Warzone', skyTop: '#140e10', skyBottom: '#8a2a16', sun: '#ff6a32', far: '#3a2a2a', near: '#1d1617', top: [92, 80, 72], dirt: [62, 52, 47], dirt2: [45, 37, 34], water: '#1b2125', warzone: true },
   grass: { name: 'Grassland', skyTop: '#33507a', skyBottom: '#f0b98a', sun: '#ffe3ae', far: '#7d7f9a', near: '#5f6f7d', top: [104, 156, 62], dirt: [118, 84, 52], dirt2: [92, 64, 40], water: '#24587a' },
   desert: { name: 'Desert', skyTop: '#5b6fa8', skyBottom: '#f6d29a', sun: '#fff1c2', far: '#c79a7a', near: '#a9775a', top: [222, 184, 112], dirt: [196, 146, 86], dirt2: [168, 118, 70], water: '#2f7c8a' },
   snow: { name: 'Tundra', skyTop: '#1f2f4f', skyBottom: '#9fb6cf', sun: '#eef4ff', far: '#7b8ca6', near: '#5d6d86', top: [236, 242, 248], dirt: [104, 112, 126], dirt2: [84, 90, 104], water: '#1d4466' },

@@ -1,4 +1,3 @@
-import '@fontsource/black-ops-one/400.css';
 import '@fontsource/chakra-petch/400.css';
 import '@fontsource/chakra-petch/500.css';
 import '@fontsource/chakra-petch/600.css';
@@ -52,7 +51,7 @@ function startDemo() {
       { name: 'Alpha', team: 0, color: '#ff8a3d', ai: 'hard', model: rand(MODELS).id, look: looks[0], weapons: all },
       { name: 'Bravo', team: 1, color: '#6fc3e8', ai: 'normal', model: rand(MODELS).id, look: looks[1], weapons: all },
     ],
-    theme: rand(Object.keys(THEMES)),
+    theme: 'warzone',
     seed: seed(),
     demo: true,
     onEnd: () => setTimeout(() => !inMatch && startDemo(), 400),
@@ -61,11 +60,12 @@ function startDemo() {
 
 // ------------------------------------------------------------------ screens
 
-const screens = ['menu', 'setup', 'shop', 'online', 'pause', 'result'] as const;
+const screens = ['menu', 'setup', 'shop', 'online', 'settings', 'pause', 'result'] as const;
 type Screen = (typeof screens)[number] | 'none';
 function show(name: Screen) {
   for (const s of screens) $(`#${s}`).hidden = s !== name;
   $('#touch').hidden = !(inMatch && name === 'none' && matchMedia('(pointer: coarse)').matches);
+  $('#vignette').hidden = inMatch || name === 'none' || name === 'result';
   if (name === 'menu') renderMenu();
 }
 
@@ -74,15 +74,64 @@ function renderMenu() {
   $('#menu-stats').textContent = profile.stats.played ? `${profile.stats.wins} ${profile.stats.wins === 1 ? 'win' : 'wins'} from ${profile.stats.played} ${profile.stats.played === 1 ? 'match' : 'matches'}` : 'No matches played yet';
 }
 
-function renderMute() {
-  const label = sfx.muted ? 'Sound off' : 'Sound on';
-  $('#btn-mute').textContent = label;
-  $('#btn-pause-mute').textContent = label;
+// ------------------------------------------------------------------ settings
+
+const isDesktopApp = '__TAURI_INTERNALS__' in window;
+const SETTINGS_KEY = 'tanks.settings';
+try {
+  sfx.muted = JSON.parse(localStorage.getItem(SETTINGS_KEY) || '{}').muted === true;
+} catch {
+  /* defaults */
 }
-function toggleMute() {
-  sfx.muted = !sfx.muted;
-  renderMute();
+
+async function setFullscreen(on: boolean) {
+  try {
+    if (isDesktopApp) {
+      const { getCurrentWindow } = await import('@tauri-apps/api/window');
+      await getCurrentWindow().setFullscreen(on);
+    } else if (on) await document.documentElement.requestFullscreen();
+    else if (document.fullscreenElement) await document.exitFullscreen();
+  } catch {
+    /* fullscreen refused (e.g. inside an embedded page) */
+  }
+  setTimeout(renderSettings, 200);
 }
+
+async function isFullscreen(): Promise<boolean> {
+  if (isDesktopApp) {
+    try {
+      const { getCurrentWindow } = await import('@tauri-apps/api/window');
+      return await getCurrentWindow().isFullscreen();
+    } catch {
+      return false;
+    }
+  }
+  return !!document.fullscreenElement;
+}
+
+async function renderSettings() {
+  chips($('#pick-sound'), [{ id: 'on', label: 'On' }, { id: 'off', label: 'Off' }], sfx.muted ? 'off' : 'on', (v) => {
+    sfx.muted = v === 'off';
+    try {
+      localStorage.setItem(SETTINGS_KEY, JSON.stringify({ muted: sfx.muted }));
+    } catch {
+      /* ignore */
+    }
+  }, renderSettings);
+  const fs = await isFullscreen();
+  chips($('#pick-display'), [{ id: 'window', label: 'Window' }, { id: 'full', label: 'Fullscreen' }], fs ? 'full' : 'window', (v) => setFullscreen(v === 'full'), renderSettings);
+}
+
+$('#btn-settings').onclick = () => {
+  renderSettings();
+  show('settings');
+};
+$('#btn-exit').hidden = !isDesktopApp;
+$('.split').classList.toggle('single', !isDesktopApp);
+$('#btn-exit').onclick = async () => {
+  const { getCurrentWindow } = await import('@tauri-apps/api/window');
+  getCurrentWindow().close();
+};
 
 document.addEventListener('pointerdown', () => sfx.unlock(), { capture: true });
 document.addEventListener('keydown', () => sfx.unlock(), { capture: true });
@@ -93,7 +142,7 @@ document.querySelectorAll<HTMLElement>('[data-back]').forEach((b) => (b.onclick 
 type Mode = 'ai' | 'local' | 'online';
 const setup = { mode: 'ai' as Mode, map: 'random', diff: 'normal' as Difficulty, p2Tank: 'patton', p2Paint: 'sand' };
 
-function chips<T extends string>(el: HTMLElement, items: { id: T; label: string; sub?: string; swatch?: string }[], current: T, pick: (v: T) => void) {
+function chips<T extends string>(el: HTMLElement, items: { id: T; label: string; sub?: string; swatch?: string }[], current: T, pick: (v: T) => void, rerender: () => void = renderSetup) {
   el.replaceChildren(
     ...items.map((it) => {
       const b = document.createElement('button');
@@ -114,7 +163,7 @@ function chips<T extends string>(el: HTMLElement, items: { id: T; label: string;
       b.onclick = () => {
         pick(it.id);
         sfx.click();
-        renderSetup();
+        rerender();
       };
       return b;
     }),
@@ -498,8 +547,6 @@ $('#btn-ai').onclick = () => openSetup('ai');
 $('#btn-local').onclick = () => openSetup('local');
 $('#btn-shop').onclick = openShop;
 $('#btn-start').onclick = startMatch;
-$('#btn-mute').onclick = toggleMute;
-$('#btn-pause-mute').onclick = toggleMute;
 $('#btn-resume').onclick = () => pause(false);
 $('#btn-quit').onclick = quitToMenu;
 $('#btn-rematch').onclick = () => {
@@ -558,7 +605,6 @@ const online: Online = new Online({
   },
 });
 
-renderMute();
 startDemo();
 show('menu');
 requestAnimationFrame(frame);

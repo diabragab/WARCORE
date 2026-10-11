@@ -18,8 +18,8 @@
     "vite-plugin-singlefile": "^2.0.0"
   },
   "dependencies": {
-    "@fontsource/black-ops-one": "^5.0.0",
     "@fontsource/chakra-petch": "^5.0.0",
+    "@tauri-apps/api": "^2.12.3",
     "ws": "^8.22.0"
   }
 }

@@ -10,21 +10,45 @@
 <div id="app">
   <canvas id="game" aria-label="Battlefield"></canvas>
 
+  <div id="vignette" aria-hidden="true"></div>
+
   <section id="menu" class="screen">
-    <div class="menu-col">
+    <div class="menu-brand">
       <h1 class="logo"><img src="/src/assets/logo.webp" alt="WARCORE: Armored Warfare" width="1100" height="550"></h1>
-      <p class="tagline">Set your angle, read the wind, and blow the ground out from under your rival.</p>
+      <p class="tagline">Turn-based tank artillery. Read the wind, set your angle, and blow the ground out from under your rival.</p>
+    </div>
+    <div class="launcher">
+      <p class="welcome">Welcome to <strong>WARCORE</strong></p>
       <nav class="menu-actions">
-        <button id="btn-ai" class="btn primary">Play vs Computer</button>
-        <button id="btn-local" class="btn">Two Players · one keyboard</button>
-        <button id="btn-online" class="btn">Online match</button>
+        <button id="btn-ai" class="btn primary big">Play vs Computer</button>
+        <button id="btn-local" class="btn">Two Players</button>
+        <button id="btn-online" class="btn">Online Match</button>
         <button id="btn-shop" class="btn">Garage &amp; Shop</button>
+        <div class="split">
+          <button id="btn-settings" class="btn icon"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M12 8.5a3.5 3.5 0 1 0 0 7 3.5 3.5 0 0 0 0-7Zm8.6 4.6-.1-1.1 2-1.6-2-3.4-2.4.9a8 8 0 0 0-1.9-1.1L15.8 4h-3.9l-.4 2.5a8 8 0 0 0-1.9 1.1L7.2 6.7l-2 3.4 2 1.6-.1 1.1.1 1.1-2 1.6 2 3.4 2.4-.9a8 8 0 0 0 1.9 1.1l.4 2.5h3.9l.4-2.5a8 8 0 0 0 1.9-1.1l2.4.9 2-3.4-2-1.6.1-1.1Z" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linejoin="round"/></svg>Settings</button>
+          <button id="btn-exit" class="btn icon" hidden><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M12 3v8M6.3 6.6a8 8 0 1 0 11.4 0" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round"/></svg>Exit</button>
+        </div>
       </nav>
       <div class="menu-foot">
         <span class="coins" id="menu-coins"></span>
         <span id="menu-stats" class="muted"></span>
-        <button id="btn-mute" class="link">Sound on</button>
       </div>
+    </div>
+  </section>
+
+  <section id="settings" class="screen" hidden>
+    <div class="panel setup-panel">
+      <p class="eyebrow">WARCORE</p>
+      <h2>Settings</h2>
+      <div class="field">
+        <span class="label">Sound</span>
+        <div class="chips" id="pick-sound"></div>
+      </div>
+      <div class="field">
+        <span class="label">Display</span>
+        <div class="chips" id="pick-display"></div>
+      </div>
+      <div class="row"><button class="btn ghost" data-back>Back</button></div>
     </div>
   </section>
 
@@ -106,7 +130,6 @@
       <h2>Paused</h2>
       <div class="col">
         <button class="btn primary" id="btn-resume">Resume</button>
-        <button class="btn" id="btn-pause-mute">Sound on</button>
         <button class="btn ghost" id="btn-quit">Quit to menu</button>
       </div>
     </div>

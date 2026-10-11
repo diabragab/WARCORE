@@ -42,7 +42,7 @@ curl -fsSL https://raw.githubusercontent.com/diabragab/tanks/main/deploy/install
 
 The game is then at `http://<server IP>`. Once a domain's A record points at the server, run it again with
 `DOMAIN=warcore.example.com` before `sh` to switch to HTTPS, and set the repo variable `WARCORE_SERVER_URL` to
-`wss://warcore.example.com` (the Windows build defaults to `ws://164.132.206.49`).
+`wss://warcore.example.com` (the Windows build defaults to `wss://warcore.claudiumstudios.online`).
 
 That installs Docker if needed and runs the game behind Caddy, which handles HTTPS once a domain is set. To redeploy on every push to
 `main`, add repo secrets `DEPLOY_HOST`, `DEPLOY_USER` and `DEPLOY_SSH_KEY` (see `.github/workflows/deploy.yml`).

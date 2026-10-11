@@ -231,12 +231,56 @@ export class Game {
       g.lineTo(W, H);
       g.fill();
     };
-    g.globalAlpha = 0.55;
-    ridge(t.far, H * 0.42, 50, 0.004);
-    g.globalAlpha = 0.7;
-    ridge(t.near, H * 0.52, 40, 0.007);
-    g.globalAlpha = 1;
+    if (t.warzone) this.paintRuins(g);
+    else {
+      g.globalAlpha = 0.55;
+      ridge(t.far, H * 0.42, 50, 0.004);
+      g.globalAlpha = 0.7;
+      ridge(t.near, H * 0.52, 40, 0.007);
+      g.globalAlpha = 1;
+    }
     return c;
+  }
+
+  /** Skyline of ruined buildings with fires glowing behind them. */
+  private paintRuins(g: CanvasRenderingContext2D) {
+    const t = this.theme;
+    const layer = (color: string, base: number, minH: number, maxH: number, alpha: number) => {
+      g.globalAlpha = alpha;
+      g.fillStyle = color;
+      for (let x = -20; x < W; ) {
+        const w = 40 + this.rnd() * 90;
+        const h = minH + this.rnd() * (maxH - minH);
+        const top = base - h;
+        g.beginPath();
+        g.moveTo(x, H);
+        g.lineTo(x, top + this.rnd() * 20);
+        // broken roofline
+        const steps = 2 + Math.floor(this.rnd() * 4);
+        for (let i = 1; i <= steps; i++) g.lineTo(x + (w * i) / steps, top + this.rnd() * 30);
+        g.lineTo(x + w, H);
+        g.fill();
+        if (this.rnd() < 0.25) g.fillRect(x + w * 0.5, top - 60, 3, 60); // antenna
+        if (this.rnd() < 0.35) {
+          const fire = g.createRadialGradient(x + w / 2, base, 4, x + w / 2, base, 120);
+          fire.addColorStop(0, 'rgba(255,120,40,0.35)');
+          fire.addColorStop(1, 'rgba(255,60,20,0)');
+          const prev: string | CanvasGradient | CanvasPattern = g.fillStyle;
+          g.fillStyle = fire;
+          g.fillRect(x - 100, base - 140, w + 200, 200);
+          g.fillStyle = prev;
+        }
+        x += w + this.rnd() * 30;
+      }
+    };
+    layer(t.far, H * 0.5, 80, 240, 0.8);
+    layer(t.near, H * 0.62, 60, 200, 0.9);
+    g.globalAlpha = 1;
+    const haze = g.createLinearGradient(0, H * 0.35, 0, H * 0.75);
+    haze.addColorStop(0, 'rgba(120,30,15,0)');
+    haze.addColorStop(1, 'rgba(120,30,15,0.35)');
+    g.fillStyle = haze;
+    g.fillRect(0, 0, W, H);
   }
 
   // ---------------------------------------------------------------- input
@@ -360,6 +404,12 @@ export class Game {
       if (c.x > W + 200) c.x = -200;
       if (c.x < -200) c.x = W + 200;
     }
+
+    if (this.theme.warzone && Math.random() < dt * 14)
+      this.particles.push({
+        x: Math.random() * W, y: H * 0.55 + Math.random() * H * 0.3, vx: (Math.random() - 0.5) * 20, vy: -30 - Math.random() * 40,
+        life: 3, max: 3, size: 1.5 + Math.random() * 1.5, color: Math.random() < 0.5 ? '#ff8a3a' : '#ffcf6a', kind: 'spark', grav: -4,
+      });
 
     switch (this.phase) {
       case 'aim': {
@@ -898,7 +948,7 @@ export class Game {
   }
 
   private drawClouds(ctx: CanvasRenderingContext2D) {
-    ctx.fillStyle = 'rgba(255,255,255,0.22)';
+    ctx.fillStyle = this.theme.warzone ? 'rgba(30,22,22,0.55)' : 'rgba(255,255,255,0.22)';
     for (const c of this.clouds) {
       for (const [dx, dy, r] of [[0, 0, 34], [32, 6, 26], [-30, 8, 24], [12, -14, 26]]) {
         ctx.beginPath();
@@ -1062,7 +1112,7 @@ export class Game {
     const t = this.current;
     const font = (w: number, s: number) => `${w} ${s}px "Chakra Petch", system-ui, sans-serif`;
     const panel = (x: number, y: number, w: number, h: number) => {
-      ctx.fillStyle = 'rgba(18,24,33,0.78)';
+      ctx.fillStyle = 'rgba(14,14,17,0.8)';
       roundRect(ctx, x, y, w, h, 6);
       ctx.fill();
     };
@@ -1156,7 +1206,7 @@ export class Game {
     if (this.banner > 0 && this.phase === 'aim') {
       ctx.globalAlpha = Math.min(1, this.banner * 2);
       ctx.textAlign = 'center';
-      ctx.font = `400 54px "Black Ops One", "Chakra Petch", system-ui, sans-serif`;
+      ctx.font = `700 56px "Chakra Petch", system-ui, sans-serif`;
       ctx.lineWidth = 6;
       ctx.strokeStyle = 'rgba(16,20,26,0.8)';
       const msg = t.name.toUpperCase();
