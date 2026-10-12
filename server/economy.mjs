@@ -16,7 +16,9 @@ const DAILY_CAP = 3000;
 /** Two-player games on one keyboard pay for this many matches a day. */
 const LOCAL_PER_DAY = 10;
 
-export const isVip = (u) => (u.vipUntil || 0) > Date.now();
+/** The Game Pass: bought once, it unlocks every item (including ones added later) and VIP for life. */
+export const hasPass = (u) => !!u.pass;
+export const isVip = (u) => hasPass(u) || (u.vipUntil || 0) > Date.now();
 const keyOf = (u) => u.name.toLowerCase();
 
 export function priceOf(item) {
@@ -27,7 +29,11 @@ export function priceOf(item) {
 
 export const rankFor = (rating) => [...CATALOG.ranks].reverse().find((r) => rating >= r.min).name;
 
-const canUse = (u, item) => u.profile.owned.includes(item) || (CATALOG.vipOnly.includes(item) && isVip(u));
+/** Every item in the catalog, as "kind:id". */
+const ALL_ITEMS = Object.entries(CATALOG.prices).flatMap(([kind, list]) => Object.keys(list).map((id) => `${kind}:${id}`));
+
+const canUse = (u, item) =>
+  (hasPass(u) && priceOf(item) !== null) || u.profile.owned.includes(item) || (CATALOG.vipOnly.includes(item) && isVip(u));
 
 /** Fills in fields added since an account was created, and drops anything that isn't for sale. */
 export function ensure(u) {
@@ -93,7 +99,7 @@ function hash(s) {
 function missionsFor(u) {
   const d = today();
   if (u.missions?.day !== d) {
-    const pool = MISSIONS.filter((m) => !m.needs || u.profile.owned.includes(m.needs));
+    const pool = MISSIONS.filter((m) => !m.needs || canUse(u, m.needs));
     let h = hash(keyOf(u) + d);
     const list = [];
     while (list.length < 3 && pool.length) {
@@ -125,7 +131,7 @@ function cleanWeaponKills(u, wk, maxKills) {
   const out = {};
   let left = maxKills;
   for (const [id, n] of Object.entries(wk && typeof wk === 'object' ? wk : {})) {
-    if (!u.profile.owned.includes(`weapon:${id}`)) continue;
+    if (!canUse(u, `weapon:${id}`)) continue;
     const k = Math.max(0, Math.min(left, Math.floor(Number(n) || 0)));
     if (k) out[id] = k;
     left -= k;
@@ -142,13 +148,14 @@ export function view(u) {
   const streak = nextStreak(u);
   return {
     coins: p.coins,
-    owned: vip ? [...p.owned, ...CATALOG.vipOnly] : p.owned,
+    owned: hasPass(u) ? ALL_ITEMS : vip ? [...p.owned, ...CATALOG.vipOnly] : p.owned,
     equipped: p.equipped,
     stats: p.stats,
     rating: p.rating,
     rank: rankFor(p.rating),
     vip,
-    vipUntil: vip ? u.vipUntil : 0,
+    vipUntil: vip ? u.vipUntil || 0 : 0,
+    pass: hasPass(u),
     paidTotal: u.paidTotal || 0,
     daily: { available: u.daily.last !== today(), streak, coins: dailyReward(streak) * (vip ? CATALOG.vip.multiplier : 1) },
     missions: missionsFor(u).map((m) => {
@@ -188,6 +195,20 @@ export function addVip(key, days, txId) {
   u.vipPayments[txId] = days;
   u.vipUntil = days > 0 ? Math.max(Date.now(), u.vipUntil || 0) + days * DAY : Math.max(0, (u.vipUntil || 0) + days * DAY);
   ensure(u);
+  persist();
+  return true;
+}
+
+/** Gives (or, for a refund, takes back) the Game Pass once per payment transaction. */
+export function setPass(key, on, txId) {
+  const u = userByKey(key);
+  if (!u) return false;
+  u.passPayments ||= {};
+  if (u.passPayments[txId] !== undefined) return false;
+  u.passPayments[txId] = on ? 1 : -1;
+  u.pass = on;
+  ensure(u);
+  leaderCache = null;
   persist();
   return true;
 }
@@ -349,7 +370,7 @@ export async function handleEconomy(req, res, path) {
     const price = priceOf(item);
     if (price === null) return json(res, 400, { error: "That item isn't for sale." }), true;
     if (CATALOG.vipOnly.includes(item)) return json(res, 400, { error: 'This one comes with VIP membership.' }), true;
-    if (!p.owned.includes(item)) {
+    if (!canUse(u, item)) {
       if (p.coins < price) return json(res, 400, { error: `You need ${price - p.coins} more coins.` }), true;
       p.coins -= price;
       p.owned.push(item);

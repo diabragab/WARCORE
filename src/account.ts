@@ -93,7 +93,14 @@ export interface Purchase { time: string; type: 'payment' | 'refund'; player: st
 export const purchases = async () => (await call<{ purchases: Purchase[] }>('GET', '/api/admin/purchases')).purchases;
 
 export interface CoinPack { id: string; name: string; coins: number; price: number; note?: string }
-export interface PayConfig { enabled: boolean; sandbox: boolean; currency: string; packs: CoinPack[]; vip?: { id: string; name: string; price: number; days: number } }
+export interface PayConfig {
+  enabled: boolean;
+  sandbox: boolean;
+  currency: string;
+  packs: CoinPack[];
+  vip?: { id: string; name: string; price: number; days: number };
+  pass?: { id: string; name: string; price: number; currency: string };
+}
 
 let payConfig: Promise<PayConfig | null> | null = null;
 /** Coin packs on sale, or null if payments aren't set up on the server. */
@@ -105,7 +112,7 @@ export function getPayConfig(): Promise<PayConfig | null> {
   return payConfig;
 }
 
-/** Opens the Whop checkout for a coin pack (or 'vip' for the monthly membership) in the player's browser. */
+/** Opens the Whop checkout for a coin pack ('vip' for the monthly membership, 'pass' for the Game Pass) in the player's browser. */
 export async function buyPack(pack: string) {
   const tauri = '__TAURI_INTERNALS__' in window;
   // Open the tab during the click so popup blockers allow it. (window.open with 'noopener' always returns null,

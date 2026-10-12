@@ -1,4 +1,4 @@
-// Coin packs sold through Whop checkout.
+// Coin packs, VIP and the Game Pass, sold through Whop checkout.
 //
 // Settings (environment variables on the server; payments stay off until all three are set):
 //   WHOP_API_KEY         Whop dashboard > Developer > API keys (Account API key, needs payment + plan permissions)
@@ -8,7 +8,7 @@
 // Create the webhook in Whop pointing at https://<your domain>/api/whop/webhook with the payment events enabled.
 import { createHmac, timingSafeEqual } from 'node:crypto';
 import { cors, db, json, logPurchase, persist, readBody, readRaw, userByKey, userFor } from './store.mjs';
-import { CATALOG, addVip, creditCoins, isVip } from './economy.mjs';
+import { CATALOG, addVip, creditCoins, hasPass, isVip, setPass } from './economy.mjs';
 
 const env = process.env;
 const W = {
@@ -29,6 +29,9 @@ export const PACKS = [
 ];
 /** Monthly VIP membership: renews through Whop; every paid month adds VIP days to the account. */
 export const VIP = { id: 'vip', name: 'VIP Commander', price: CATALOG.vip.price, days: CATALOG.vip.days };
+/** The Game Pass: one payment (in euros) for every item, now and later, plus VIP for life. */
+export const PASS = { id: 'pass', name: 'Game Pass', price: CATALOG.pass.price, currency: CATALOG.pass.currency };
+const productOf = (id) => (id === VIP.id ? VIP : id === PASS.id ? PASS : PACKS.find((x) => x.id === id));
 
 async function whop(method, path, body) {
   const res = await fetch(API + path, {
@@ -48,7 +51,7 @@ async function createCheckout(key, pack, returnTo) {
       : { plan_type: 'one_time', initial_price: pack.price, title: `WARCORE ${pack.name}` };
   const c = await whop('POST', '/checkout_configurations', {
     mode: 'payment',
-    plan: { company_id: W.company, currency: CURRENCY.toLowerCase(), ...plan },
+    plan: { company_id: W.company, currency: (pack.currency || CURRENCY).toLowerCase(), ...plan },
     metadata: { warcore_user: key, warcore_pack: pack.id },
     ...(returnTo ? { redirect_url: returnTo } : {}),
   });
@@ -86,7 +89,7 @@ async function settle(paymentId, refund) {
   const link = membership ? db.whop[membership] : null;
   const key = p.metadata?.warcore_user || link?.key;
   const packId = p.metadata?.warcore_pack || link?.pack;
-  const pack = packId === VIP.id ? VIP : PACKS.find((x) => x.id === packId);
+  const pack = productOf(packId);
   const u = key && userByKey(key);
   if (!u || !pack) return console.log(`Whop payment ${paymentId}: not a WARCORE purchase, ignored`);
   if (pack === VIP && membership && !link) {
@@ -97,15 +100,18 @@ async function settle(paymentId, refund) {
   const refunded = Number(p.refunded_amount) > 0 || /refund|dispute_lost/.test(String(p.substatus)) || /refund/.test(String(p.status));
   if (refund ? !refunded : !paid) return console.log(`Whop payment ${paymentId} has status ${p.status}/${p.substatus}, nothing to do yet`);
   const tx = refund ? `refund:${paymentId}` : paymentId;
-  const changed = pack === VIP ? addVip(key, refund ? -(VIP.days + 1) : VIP.days + 1, tx) : creditCoins(key, refund ? -pack.coins : pack.coins, tx);
+  const changed =
+    pack === VIP ? addVip(key, refund ? -(VIP.days + 1) : VIP.days + 1, tx)
+    : pack === PASS ? setPass(key, !refund, tx)
+    : creditCoins(key, refund ? -pack.coins : pack.coins, tx);
   if (!changed) return;
   logPurchase({
     type: refund ? 'refund' : 'payment',
     player: u.name,
     item: pack.id,
-    coins: pack === VIP ? 0 : refund ? -pack.coins : pack.coins,
+    coins: !pack.coins ? 0 : refund ? -pack.coins : pack.coins,
     amount: Number(refund ? p.refunded_amount ?? p.total : p.total ?? pack.price) || pack.price,
-    currency: String(p.currency || CURRENCY).toUpperCase(),
+    currency: String(p.currency || pack.currency || CURRENCY).toUpperCase(),
     payment: paymentId,
     reason: p.billing_reason || null,
   });
@@ -139,15 +145,18 @@ export async function handlePayments(req, res, path) {
   if (cors(req, res)) return true;
 
   if (path === '/api/pay/config' && req.method === 'GET') {
-    return json(res, 200, { enabled: enabled(), sandbox: W.sandbox, currency: CURRENCY, packs: PACKS, vip: VIP }), true;
+    return json(res, 200, { enabled: enabled(), sandbox: W.sandbox, currency: CURRENCY, packs: PACKS, vip: VIP, pass: PASS }), true;
   }
   if (path === '/api/pay/checkout' && req.method === 'POST') {
     if (!enabled()) return json(res, 503, { error: 'Coin purchases are not available yet.' }), true;
     const who = userFor(req);
     if (!who?.user) return json(res, 401, { error: 'Please sign in again.' }), true;
     const body = await readBody(req).catch(() => ({}));
-    const pack = body.pack === VIP.id ? VIP : PACKS.find((p) => p.id === body.pack);
+    const pack = productOf(body.pack);
     if (!pack) return json(res, 400, { error: 'Unknown coin pack.' }), true;
+    // Everything is already unlocked for Game Pass owners, so there's nothing left to pay for.
+    if (hasPass(who.user))
+      return json(res, 409, { error: 'You own the Game Pass, so everything is already unlocked, VIP included.' }), true;
     if (pack === VIP && isVip(who.user) && who.user.vipUntil - Date.now() > 5 * 86_400_000)
       return json(res, 409, { error: `You're already VIP until ${new Date(who.user.vipUntil).toDateString()}.` }), true;
     const host = req.headers['x-forwarded-host'] || req.headers.host;

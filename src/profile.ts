@@ -11,6 +11,8 @@ export interface Profile {
   rank?: string;
   vip?: boolean;
   vipUntil?: number;
+  /** Owns the Game Pass: every item, now and later, plus VIP for life. */
+  pass?: boolean;
   /** Coins bought so far; a change means a purchase came through. */
   paidTotal?: number;
   daily?: { available: boolean; streak: number; coins: number };

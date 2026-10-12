@@ -94,6 +94,11 @@ VIP is a monthly Whop membership ($4.99, set in `shared/catalog.json`). Each pai
 account (renewals are matched to the account through the Whop membership id), and a refund takes them away. VIP doubles
 coins from matches, missions and the daily reward, unlocks the VIP paint and decal, and shows a VIP badge.
 
+The Game Pass is a one-time Whop payment (€50, `pass` in `shared/catalog.json`; its plan is created in euros while the
+packs and VIP stay in dollars). It sets `pass` on the account, which unlocks every item in the catalog, including ones
+added later, and counts as VIP for life. A refund removes it. Pass owners can't open another checkout, since there is
+nothing left for them to buy.
+
 Every payment and refund is appended to `DATA_DIR/purchases.log` (one JSON line each). Accounts named in
 `ADMIN_USERS` (comma separated, e.g. `set ADMIN_USERS=diab` in `secrets.cmd`) see a "Purchase log" button on their
 account screen.

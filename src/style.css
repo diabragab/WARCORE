@@ -256,6 +256,12 @@ h2 { margin: 0; font-family: var(--display); font-weight: 700; font-size: 32px; 
 .vip-offer { display: flex; gap: 16px; align-items: center; justify-content: space-between; flex-wrap: wrap; padding: 16px; border: 1px solid rgba(255, 211, 107, 0.45); border-radius: var(--radius); background: linear-gradient(135deg, rgba(255, 200, 80, 0.12), rgba(255, 200, 80, 0.02)); }
 .vip-title { margin: 4px 0 8px; font-size: 20px; font-weight: 700; color: #ffd36b; }
 .vip-perks { margin: 0; padding-left: 18px; font-size: 14px; line-height: 1.6; color: var(--text); }
+.badge.pass { color: var(--signal-ink); background: linear-gradient(180deg, var(--signal-hi), var(--signal)); border-color: var(--signal-hi); }
+.pass-btn { color: #ff8a6b; border-color: rgba(239, 59, 44, 0.6); }
+.pass-offer { display: flex; gap: 16px; align-items: center; justify-content: space-between; flex-wrap: wrap; margin-bottom: 12px; padding: 16px; border: 1px solid rgba(239, 59, 44, 0.6); border-radius: var(--radius); background: linear-gradient(135deg, rgba(239, 59, 44, 0.2), rgba(239, 59, 44, 0.03)); }
+.pass-offer > div { flex: 1 1 300px; }
+.pass-offer .vip-title { color: #ff8a6b; }
+.pass-offer .hint { margin: 8px 0 0; }
 .result-notes { margin: -8px 0 0; padding: 0; list-style: none; font-size: 14px; color: var(--text); display: flex; flex-direction: column; gap: 4px; }
 .result-notes:empty { display: none; }
 .leader-table td:first-child { width: 2.5em; color: var(--muted); }

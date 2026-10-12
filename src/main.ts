@@ -110,14 +110,14 @@ function renderMenu() {
   $('#btn-account').textContent = s ? 'Account' : 'Sign in to save your progress';
   $('#btn-account').hidden = !account.accountsAvailable();
   $('#menu-coins').textContent = `${profile.coins} coins`;
-  $('#menu-rank').replaceChildren(...badges(profile.rating, profile.vip));
+  $('#menu-rank').replaceChildren(...badges(profile.rating, profile.vip, profile.pass));
   renderMissions();
   $('#menu-stats').textContent = profile.stats.played ? `${profile.stats.wins} ${profile.stats.wins === 1 ? 'win' : 'wins'} from ${profile.stats.played} ${profile.stats.played === 1 ? 'match' : 'matches'}` : 'No matches played yet';
   if (profile.stats.arcadeBest) $('#menu-stats').textContent += ` · Arcade best: wave ${profile.stats.arcadeBest}`;
 }
 
-/** Rank and VIP badges for a player (nothing for a player without a rating, e.g. in the offline preview). */
-function badges(rating?: number, vip?: boolean): HTMLElement[] {
+/** Rank and VIP (or Game Pass) badges for a player (nothing for a player without a rating, e.g. in the offline preview). */
+function badges(rating?: number, vip?: boolean, pass?: boolean): HTMLElement[] {
   const out: HTMLElement[] = [];
   if (rating !== undefined) {
     const rank = rankFor(rating);
@@ -129,8 +129,9 @@ function badges(rating?: number, vip?: boolean): HTMLElement[] {
   }
   if (vip) {
     const v = document.createElement('span');
-    v.className = 'badge vip';
-    v.textContent = 'VIP';
+    v.className = pass ? 'badge pass' : 'badge vip';
+    v.textContent = pass ? 'Game Pass' : 'VIP';
+    if (pass) v.title = 'Owns the Game Pass: everything unlocked, VIP for life';
     out.push(v);
   }
   return out;
@@ -271,10 +272,14 @@ async function openPurchases() {
   try {
     const list = await account.purchases();
     const money = (n: number, c: string) => new Intl.NumberFormat('en-US', { style: 'currency', currency: c || 'USD' }).format(n);
-    const paid = list.filter((p) => p.type === 'payment').reduce((a, p) => a + p.amount, 0);
-    const refunded = list.filter((p) => p.type === 'refund').reduce((a, p) => a + p.amount, 0);
+    // Totals per currency: coin packs and VIP are in dollars, the Game Pass in euros.
+    const total = (type: account.Purchase['type']) => {
+      const by = new Map<string, number>();
+      for (const p of list) if (p.type === type) by.set(p.currency || 'USD', (by.get(p.currency || 'USD') ?? 0) + p.amount);
+      return by.size ? [...by].map(([c, n]) => money(n, c)).join(' + ') : money(0, 'USD');
+    };
     $('#purchase-summary').textContent = list.length
-      ? `${list.filter((p) => p.type === 'payment').length} payments (${money(paid, 'USD')}), ${list.filter((p) => p.type === 'refund').length} refunds (${money(refunded, 'USD')}). Newest first.`
+      ? `${list.filter((p) => p.type === 'payment').length} payments (${total('payment')}), ${list.filter((p) => p.type === 'refund').length} refunds (${total('refund')}). Newest first.`
       : 'No payments yet.';
     const head = document.createElement('tr');
     for (const h of ['When', 'Type', 'Player', 'Item', 'Amount', 'Coins', 'Whop payment']) {
@@ -287,7 +292,7 @@ async function openPurchases() {
     const tbody = document.createElement('tbody');
     for (const p of list) {
       const tr = document.createElement('tr');
-      const item = p.item === 'vip' ? `VIP${p.reason === 'subscription_cycle' ? ' (renewal)' : ''}` : p.item;
+      const item = p.item === 'vip' ? `VIP${p.reason === 'subscription_cycle' ? ' (renewal)' : ''}` : p.item === 'pass' ? 'Game Pass' : p.item;
       for (const v of [new Date(p.time).toLocaleString(), p.type === 'refund' ? 'Refund' : 'Payment', p.player, item, money(p.amount, p.currency), p.coins ? String(p.coins) : '', p.payment]) {
         const td = document.createElement('td');
         td.textContent = v;
@@ -406,7 +411,8 @@ function renderAccount(status = '') {
       ['All wins', `${st.wins} of ${st.played}`],
       ['Tanks destroyed', String(st.kills ?? 0)],
       ['Best arcade wave', String(st.arcadeBest)],
-      ['VIP', profile.vip && profile.vipUntil ? `Active until ${new Date(profile.vipUntil).toLocaleDateString()}` : 'No'],
+      ['Game Pass', profile.pass ? 'Owned: everything unlocked' : 'No'],
+      ['VIP', profile.pass ? 'For life (Game Pass)' : profile.vip && profile.vipUntil ? `Active until ${new Date(profile.vipUntil).toLocaleDateString()}` : 'No'],
     ];
     const tb = document.createElement('tbody');
     for (const [a, b] of rows) {
@@ -1047,10 +1053,18 @@ whenTankArtReady(() => {
 function openShop() {
   renderShop();
   show('shop');
+  openShopButtons();
+}
+
+/** The shop's buy buttons, which depend on what's on sale and on what the player already has. */
+function openShopButtons() {
   account.getPayConfig().then((c) => {
-    $('#btn-buy').hidden = !c;
-    $('#btn-vip').hidden = !c?.vip;
+    // Game Pass owners have everything already, so only the pass button stays (it shows what the pass covers).
+    $('#btn-buy').hidden = !c || !!profile.pass;
+    $('#btn-vip').hidden = !c?.vip || !!profile.pass;
     $('#btn-vip').textContent = profile.vip ? 'VIP ✓' : 'Get VIP';
+    $('#btn-pass').hidden = !c?.pass || !account.session;
+    $('#btn-pass').textContent = profile.pass ? 'Game Pass ✓' : 'Game Pass';
   });
 }
 
@@ -1058,25 +1072,29 @@ function openShop() {
 
 let watchTimer: ReturnType<typeof setInterval> | undefined;
 
-/** After a checkout opens, check the account for the new coins or VIP for a few minutes. */
+/** After a checkout opens, check the account for the new coins, VIP or Game Pass for a few minutes. */
 function watchForPurchase() {
   clearInterval(watchTimer);
-  const seen = `${profile.paidTotal ?? 0}/${profile.vipUntil ?? 0}`;
+  const mark = (p: Profile) => `${p.paidTotal ?? 0}/${p.vipUntil ?? 0}/${p.pass ? 1 : 0}`;
+  const seen = mark(profile);
   let tries = 0;
   watchTimer = setInterval(async () => {
     if (++tries > 60) return clearInterval(watchTimer);
     const p = await account.fetchProfile().catch(() => null);
-    if (p && `${p.paidTotal ?? 0}/${p.vipUntil ?? 0}` !== seen) {
+    if (p && mark(p) !== seen) {
       clearInterval(watchTimer);
       const added = p.coins - profile.coins;
       const vipNow = p.vip && !profile.vip;
+      const passNow = p.pass && !profile.pass;
       useProfile(p);
       sfx.coin();
-      $('#buy-status').textContent = vipNow
-        ? "You're VIP now. Thank you! Your VIP paint and decal are in the Garage."
+      $('#buy-status').textContent = passNow
+        ? 'Your Game Pass is active. Every tank, weapon and cosmetic is unlocked, and you are VIP for life. Thank you!'
+        : vipNow ? "You're VIP now. Thank you! Your VIP paint and decal are in the Garage."
         : added > 0 ? `${added.toLocaleString('en-US')} coins added. Thank you!` : 'Your purchase was updated.';
       renderVipOffer();
       renderShop();
+      openShopButtons();
     }
   }, 5000);
 }
@@ -1088,7 +1106,9 @@ async function checkout(btn: HTMLButtonElement, pack: string) {
   try {
     await account.buyPack(pack);
     $('#buy-status').textContent =
-      pack === 'vip' ? 'Finish joining in the page that opened. VIP switches on here automatically.' : 'Finish paying in the page that opened. Your coins will appear here automatically.';
+      pack === 'vip' ? 'Finish joining in the page that opened. VIP switches on here automatically.'
+      : pack === 'pass' ? 'Finish paying in the page that opened. Everything unlocks here automatically.'
+      : 'Finish paying in the page that opened. Your coins will appear here automatically.';
     watchForPurchase();
   } catch (e) {
     $('#buy-status').textContent = (e as Error).message;
@@ -1099,18 +1119,28 @@ async function checkout(btn: HTMLButtonElement, pack: string) {
 }
 
 let vipPrice = '';
+let passPrice = '';
 function renderVipOffer() {
-  $('#buy-vip').hidden = !vipPrice || !account.session;
+  const pass = !!profile.pass;
+  $('#buy-pass').hidden = !passPrice || !account.session;
+  $('#pass-price').textContent = pass ? 'You own the Game Pass. Everything is unlocked.' : `${passPrice}, one payment`;
+  $('#btn-get-pass').hidden = pass;
+  $('#pass-note').hidden = pass;
+  // With the pass there's nothing left to buy: VIP is included and coins only buy items.
+  $('#buy-vip').hidden = !vipPrice || !account.session || pass;
+  $('#buy-packs').hidden = pass;
   $('#vip-price').textContent = profile.vip && profile.vipUntil ? `You're VIP until ${new Date(profile.vipUntil).toLocaleDateString()}` : `${vipPrice} a month`;
   $('#btn-join-vip').hidden = !!profile.vip;
 }
 $('#btn-join-vip').onclick = () => checkout($<HTMLButtonElement>('#btn-join-vip'), 'vip');
+$('#btn-get-pass').onclick = () => checkout($<HTMLButtonElement>('#btn-get-pass'), 'pass');
 
 async function openBuy() {
   const c = await account.getPayConfig();
   if (!c) return;
   const fmt = new Intl.NumberFormat('en-US', { style: 'currency', currency: c.currency });
   vipPrice = c.vip ? fmt.format(c.vip.price) : '';
+  passPrice = c.pass ? new Intl.NumberFormat('en-IE', { style: 'currency', currency: c.pass.currency, maximumFractionDigits: 0 }).format(c.pass.price) : '';
   renderVipOffer();
   $('#buy-packs').replaceChildren(
     ...c.packs.map((pk) => {
@@ -1138,6 +1168,7 @@ async function openBuy() {
 
 $('#btn-buy').onclick = openBuy;
 $('#btn-vip').onclick = openBuy;
+$('#btn-pass').onclick = openBuy;
 $('#buy-close').onclick = () => {
   renderShop();
   show('shop');

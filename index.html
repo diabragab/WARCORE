@@ -156,6 +156,7 @@
         </div>
         <div class="shop-wallet">
           <span class="coins big" id="shop-coins"></span>
+          <button class="btn small pass-btn" id="btn-pass" hidden>Game Pass</button>
           <button class="btn small vip-btn" id="btn-vip" hidden>VIP</button>
           <button class="btn primary small" id="btn-buy" hidden>Buy coins</button>
         </div>
@@ -209,7 +210,20 @@
   <section id="buy" class="overlay" hidden>
     <div class="panel">
       <p class="eyebrow">Garage &amp; Shop</p>
-      <h2>Buy coins</h2>
+      <h2>Coins, VIP and the Game Pass</h2>
+      <div class="pass-offer" id="buy-pass" hidden>
+        <div>
+          <p class="eyebrow">WARCORE Game Pass</p>
+          <p class="vip-title" id="pass-price"></p>
+          <ul class="vip-perks" id="pass-perks">
+            <li>Every tank, weapon, paint, decal and trail, unlocked right away</li>
+            <li>Everything added in future updates, at no extra cost</li>
+            <li>VIP for life: double coins, the VIP paint and decal, and the VIP badge</li>
+          </ul>
+          <p class="hint" id="pass-note">One payment, no subscription. Already paying for VIP each month? Cancel it in your Whop account once the pass is active.</p>
+        </div>
+        <button class="btn primary" id="btn-get-pass">Get the Game Pass</button>
+      </div>
       <div class="vip-offer" id="buy-vip" hidden>
         <div>
           <p class="eyebrow">VIP Commander</p>
