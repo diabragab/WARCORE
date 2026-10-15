@@ -41,7 +41,7 @@ const http = createServer(async (req, res) => {
     const f = await latestInstaller();
     if (!f) return res.writeHead(302, { location: '/#download' }).end();
     res.writeHead(200, { 'content-type': 'application/octet-stream', 'content-length': f.size, 'content-disposition': 'attachment; filename="WARCORE-Setup.exe"' });
-    return createReadStream(join(DOWNLOADS, f.file)).pipe(res);
+    return createReadStream(join(DOWNLOADS, f.file)).on('error', () => res.destroy()).pipe(res);
   }
   if (req.url?.startsWith('/api/')) {
     try {
@@ -183,6 +183,8 @@ wss.on('connection', (ws) => {
   let me = null;
   ws.isAlive = true;
   ws.on('pong', () => (ws.isAlive = true));
+  // Bad frames (too big, broken) close this connection; without a listener they would crash the whole server.
+  ws.on('error', (e) => console.error('websocket:', e.message));
 
   ws.on('message', (raw) => {
     let msg;
@@ -191,6 +193,16 @@ wss.on('connection', (ws) => {
     } catch {
       return;
     }
+    // Anything but an object (null, a number) is not a message from the game.
+    if (!msg || typeof msg !== 'object') return;
+    try {
+      onMessage(msg);
+    } catch (e) {
+      console.error('websocket message:', e);
+    }
+  });
+
+  function onMessage(msg) {
     if (['quick', 'create', 'join'].includes(msg.t) && !room) {
       // Online play needs an account, so results and ratings land on the right player.
       const who = userByToken(msg.token);
@@ -234,7 +246,7 @@ wss.on('connection', (ws) => {
         for (const p of room.players) if (p.ws !== ws) send(p.ws, { t: 'rematch-offer' });
       }
     }
-  });
+  }
 
   ws.on('close', () => {
     const qi = queue.findIndex((q) => q.ws === ws);
