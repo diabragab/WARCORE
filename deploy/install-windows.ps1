@@ -62,7 +62,7 @@ Pop-Location
 
 # 3. Run at startup, private to this machine
 $start = Join-Path $Root 'start.cmd'
-Set-Content -Encoding ASCII $start "@echo off`r`nset PORT=$Port`r`nset HOST=127.0.0.1`r`nset DATA_DIR=$Root\data`r`nif exist `"$Root\secrets.cmd`" call `"$Root\secrets.cmd`"`r`n`"$Node`" `"$App\server\index.mjs`" >> `"$Root\server.log`" 2>&1`r`n"
+Set-Content -Encoding ASCII $start "@echo off`r`nset PORT=$Port`r`nset HOST=127.0.0.1`r`nset DATA_DIR=$Root\data`r`nif exist `"$Root\secrets.cmd`" call `"$Root\secrets.cmd`"`r`nrem If the server ever stops or crashes, log it and start it again after 5 seconds.`r`n:run`r`n`"$Node`" `"$App\server\index.mjs`" >> `"$Root\server.log`" 2>&1`r`necho %date% %time% server exited with code %errorlevel%, restarting in 5 seconds >> `"$Root\server.log`"`r`nping -n 6 127.0.0.1 >nul`r`ngoto run`r`n"
 $action = New-ScheduledTaskAction -Execute 'cmd.exe' -Argument "/c `"$start`""
 $trigger = New-ScheduledTaskTrigger -AtStartup
 $settings = New-ScheduledTaskSettingsSet -ExecutionTimeLimit ([TimeSpan]::Zero) -RestartCount 999 -RestartInterval (New-TimeSpan -Minutes 1) -AllowStartIfOnBatteries

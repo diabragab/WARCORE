@@ -57,8 +57,9 @@ const http = createServer(async (req, res) => {
   // The website: "/" is the landing page and the game lives at "/play/".
   if (url === '/play') return res.writeHead(301, { location: '/play/' }).end();
   const page = PAGES[url] ?? (url.startsWith('/play/') ? url.slice(5) : url);
-  const path = normalize(decodeURIComponent(page)).replace(/^([/\\])+/, '');
   try {
+    // Inside the try: a malformed %-escape (bots send these) must give a 404, not crash the server.
+    const path = normalize(decodeURIComponent(page)).replace(/^([/\\])+/, '');
     const file = join(DIST, path === '' ? 'index.html' : path);
     if (!file.startsWith(DIST)) throw new Error('outside');
     const body = await readFile(file);
